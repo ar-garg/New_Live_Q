@@ -24,7 +24,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'cs671-viva-g27')
 app.config['SESSION_COOKIE_DOMAIN'] = False
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent',
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading',
                     ping_timeout=60, ping_interval=25, max_http_buffer_size=1_000_000)
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'samiscrazy')
