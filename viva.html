@@ -171,6 +171,8 @@
         .option-text { font-size: 0.88rem; line-height: 1.3; }
 
         .multi-hint { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.6rem; font-family: var(--mono); }
+        .q-type-badge { display: inline-block; font-family: var(--mono); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 3px; border: 1px solid var(--border-dark); background: var(--bg); color: var(--muted); margin-bottom: 0.75rem; }
+        .q-type-badge.multi { background: #FEF9EF; border-color: var(--accent); color: var(--accent-dark); }
 
         .fill-input {
             width: 100%;
@@ -495,6 +497,9 @@ function renderQuestion(q) {
     var qType = q.type || 'mcq';
     var html = '<div style="display:flex;flex-direction:column;">' +
         '<div class="q-number">Question ' + (currentQuestionId + 1) + '</div>' +
+        '<div class="q-type-badge' + (qType === 'multi_correct' ? ' multi' : '') + '">' +
+        (qType === 'mcq' ? 'Single correct' : qType === 'true_false' ? 'True / False' : qType === 'fill_up' ? 'Fill in the blank' : 'Multi correct — select all that apply') +
+        '</div>' +
         '<div class="q-text">' + escHtml(q.q) + '</div>' +
         '<div class="options" id="answerArea">';
 

@@ -444,6 +444,76 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
+
+        .current-q-panel {
+            flex-shrink: 0;
+            border-top: 1px solid var(--border);
+            background: var(--surface);
+            padding: 0.875rem 1.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .cq-header {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .cq-label {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--green);
+        }
+
+        .cq-type-badge {
+            font-family: var(--mono);
+            font-size: 0.6rem;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 0.15rem 0.45rem;
+            border-radius: 3px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        .cq-type-badge.multi { background: rgba(232,160,32,0.12); border-color: var(--accent-dark); color: var(--accent); }
+
+        .cq-text {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.4;
+            margin-bottom: 0.5rem;
+        }
+
+        .cq-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .cq-opt {
+            font-family: var(--mono);
+            font-size: 0.72rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            background: var(--surface2);
+        }
+
+        .cq-no-question {
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -500,6 +570,14 @@
                 <div style="font-size:0.78rem;margin-top:0.4rem">Share the PIN or QR code to get started.</div>
             </div>
         </div>
+        <div class="current-q-panel" id="currentQPanel" style="display:none;">
+            <div class="cq-header">
+                <span class="cq-label" id="cqLabel">—</span>
+                <span class="cq-type-badge" id="cqTypeBadge">—</span>
+            </div>
+            <div class="cq-text" id="cqText">—</div>
+            <div class="cq-options" id="cqOptions"></div>
+        </div>
         <div class="bottom-bar">
             <div><span class="pulse"></span>Live updates</div>
             <div id="lbUpdatedAt">—</div>
@@ -533,6 +611,7 @@ socket.on('question_opened', function(data) {
     activeQId = data.question_id;
     updateStatusPill(true);
     renderQControls();
+    showCurrentQuestion(data.question, data.question_id);
 });
 
 socket.on('question_closed', function() {
@@ -542,6 +621,7 @@ socket.on('question_closed', function() {
     activeQId = null;
     updateStatusPill(false);
     renderQControls();
+    hideCurrentQuestion();
 });
 
 socket.on('leaderboard_update', function(data) {
@@ -624,6 +704,49 @@ function renderLeaderboard(board) {
             strikesHtml +
             '</div></div>';
     }).join('');
+}
+
+function showCurrentQuestion(q, qId) {
+    var panel = document.getElementById('currentQPanel');
+    var label = document.getElementById('cqLabel');
+    var badge = document.getElementById('cqTypeBadge');
+    var text = document.getElementById('cqText');
+    var opts = document.getElementById('cqOptions');
+
+    var typeMap = {
+        'mcq': 'Single correct',
+        'true_false': 'True / False',
+        'fill_up': 'Fill in the blank',
+        'multi_correct': 'Multi correct — select all that apply'
+    };
+    var isMulti = q.type === 'multi_correct';
+
+    label.textContent = 'Q' + (qId + 1) + ' — Now open';
+    badge.textContent = typeMap[q.type] || q.type;
+    badge.className = 'cq-type-badge' + (isMulti ? ' multi' : '');
+    text.textContent = q.q || '';
+
+    var optHtml = '';
+    if (q.options) {
+        q.options.forEach(function(opt, i) {
+            optHtml += '<span class="cq-opt">' + String.fromCharCode(65+i) + '. ' + escHtml(opt) + '</span>';
+        });
+    } else if (q.type === 'true_false') {
+        optHtml = '<span class="cq-opt">True</span><span class="cq-opt">False</span>';
+    } else if (q.type === 'fill_up') {
+        optHtml = '<span class="cq-opt" style="font-style:italic;color:var(--muted)">Text answer</span>';
+    }
+    opts.innerHTML = optHtml;
+    panel.style.display = 'block';
+}
+
+function hideCurrentQuestion() {
+    document.getElementById('currentQPanel').style.display = 'none';
+}
+
+// Show if question already open on page load
+if (activeQId !== null && quizData.questions_data && quizData.questions_data[activeQId]) {
+    showCurrentQuestion(quizData.questions_data[activeQId], activeQId);
 }
 
 function escHtml(str) {
