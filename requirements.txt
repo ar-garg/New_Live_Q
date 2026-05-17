@@ -5,7 +5,7 @@ SQLAlchemy==2.0.19
 python-socketio==5.9.0
 python-engineio==4.7.1
 qrcode==7.4.2
-Pillow==10.0.0
+Pillow==10.4.0
 openpyxl==3.1.2
 gevent==23.9.1
 gevent-websocket==0.10.1
