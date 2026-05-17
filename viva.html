@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz - {{ username }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen select-none" oncontextmenu="return false;">
+    <div class="flex h-screen gap-4 p-4">
+        <!-- Left: Question -->
+        <div class="flex-1 max-w-2xl">
+            <div class="bg-gray-800 rounded-xl border border-gray-700 p-8 h-full flex flex-col">
+                <div class="mb-6">
+                    <h1 class="text-gray-400 text-sm font-mono mb-2">{{ username }}</h1>
+                    <div id="status" class="inline-block px-3 py-1 bg-gray-700 rounded text-xs">
+                        Waiting for question...
+                    </div>
+                </div>
+
+                <div id="questionContainer" class="flex-1 flex flex-col justify-center">
+                    <p class="text-gray-400 text-center">🔄 Quiz will begin when teacher opens first question.</p>
+                </div>
+
+                <div id="timerBar" class="mt-6 hidden">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-xs text-gray-400">Time Remaining</span>
+                        <span id="timerText" class="font-mono font-bold text-lg text-red-500">00:00</span>
+                    </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div id="timerProgress" class="bg-blue-500 h-2 rounded-full transition-all" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Leaderboard -->
+        <div class="w-80">
+            <div class="bg-gray-800 rounded-xl border border-gray-700 p-6 h-full flex flex-col">
+                <h2 class="text-lg font-bold mb-4">🏆 Leaderboard</h2>
+                <div id="leaderboard" class="flex-1 overflow-y-auto space-y-2 text-sm">
+                    <p class="text-gray-500 text-center">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const quizId = "{{ quiz_id }}";
+        const username = "{{ username }}";
+        let currentQuestionId = null;
+        let questionStartTime = null;
+        let timerInterval = null;
+        let currentQuestion = null;
+
+        const socket = io();
+
+        socket.on('connect', () => {
+            socket.emit('join_quiz', { quiz_id: quizId });
+            socket.emit('get_leaderboard', { quiz_id: quizId });
+        });
+
+        socket.on('question_opened', (data) => {
+            currentQuestionId = data.question_id;
+            currentQuestion = data.question;
+            questionStartTime = Date.now();
+            renderQuestion(data.question);
+            startTimer(data.question.time_limit);
+            updateStatus(`Question ${data.question_id + 1} - Answer Now`);
+        });
+
+        socket.on('question_closed', () => {
+            currentQuestionId = null;
+            currentQuestion = null;
+            clearInterval(timerInterval);
+            document.getElementById('timerBar').classList.add('hidden');
+            document.getElementById('questionContainer').innerHTML = `
+                <p class="text-gray-400 text-center">Question closed. Waiting for next...</p>
+            `;
+            updateStatus('Waiting for next question...');
+        });
+
+        socket.on('leaderboard_update', (data) => {
+            renderLeaderboard(data.leaderboard);
+        });
+
+        function renderQuestion(q) {
+            const container = document.getElementById('questionContainer');
+            const qType = q.type || 'mcq';
+            let html = `<div>
+                <h3 class="text-2xl font-semibold mb-6">${q.q}</h3>
+                <form id="answerForm" class="space-y-3">`;
+
+            if (qType === 'mcq') {
+                q.options.forEach((opt, idx) => {
+                    html += `
+                    <label class="flex items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer transition border border-transparent hover:border-blue-500">
+                        <input type="radio" name="answer" value="${idx}" class="hidden peer" required>
+                        <span class="peer-checked:text-blue-400 peer-checked:font-bold">${opt}</span>
+                    </label>`;
+                });
+            } else if (qType === 'true_false') {
+                ['true', 'false'].forEach(val => {
+                    html += `
+                    <label class="flex items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer transition border border-transparent hover:border-blue-500">
+                        <input type="radio" name="answer" value="${val}" class="hidden peer" required>
+                        <span class="peer-checked:text-blue-400 peer-checked:font-bold">${val.toUpperCase()}</span>
+                    </label>`;
+                });
+            } else if (qType === 'fill_up') {
+                html += `<input type="text" name="answer" placeholder="Type your answer..." class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500" required>`;
+            } else if (qType === 'multi_correct') {
+                q.options.forEach((opt, idx) => {
+                    html += `
+                    <label class="flex items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer transition border border-transparent hover:border-blue-500">
+                        <input type="checkbox" name="answer" value="${idx}" class="hidden peer" onchange="updateMultiAnswer()">
+                        <span class="peer-checked:text-blue-400 peer-checked:font-bold">${opt}</span>
+                    </label>`;
+                });
+            }
+
+            html += `<button type="submit" class="w-full mt-4 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-bold">Submit</button>
+                </form></div>`;
+
+            container.innerHTML = html;
+
+            document.getElementById('answerForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitAnswer();
+            });
+        }
+
+        function startTimer(timeLimit) {
+            const maxTime = (timeLimit || 60) * 1000;
+            document.getElementById('timerBar').classList.remove('hidden');
+
+            timerInterval = setInterval(() => {
+                const elapsed = Date.now() - questionStartTime;
+                const remaining = Math.max(0, maxTime - elapsed);
+                const secs = Math.ceil(remaining / 1000);
+
+                document.getElementById('timerText').innerText = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+                document.getElementById('timerProgress').style.width = ((remaining / maxTime) * 100) + '%';
+
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    submitAnswer();
+                }
+            }, 100);
+        }
+
+        function submitAnswer() {
+            if (!currentQuestion) return;
+
+            const form = document.getElementById('answerForm');
+            if (!form) return;
+
+            let answer = '';
+            const qType = currentQuestion.type || 'mcq';
+
+            if (qType === 'multi_correct') {
+                const checked = Array.from(document.querySelectorAll('input[name="answer"]:checked')).map(e => e.value);
+                answer = checked.join(',');
+            } else {
+                const field = form.querySelector('input[name="answer"]:checked') || form.querySelector('input[name="answer"]');
+                answer = field ? field.value : '';
+            }
+
+            if (!answer) {
+                alert('Please select an answer');
+                return;
+            }
+
+            clearInterval(timerInterval);
+            const timeTaken = (Date.now() - questionStartTime) / 1000;
+
+            fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question_id: currentQuestionId,
+                    answer: answer,
+                    time_taken: timeTaken
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    document.getElementById('questionContainer').innerHTML = '<p class="text-green-400 text-center text-lg">✓ Answer submitted</p>';
+                }
+            });
+        }
+
+        function renderLeaderboard(board) {
+            const container = document.getElementById('leaderboard');
+            if (!board || board.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center">No participants yet</p>';
+                return;
+            }
+
+            container.innerHTML = board.slice(0, 15).map((p, idx) => `
+                <div class="flex justify-between items-center p-3 bg-gray-700 rounded border border-gray-600">
+                    <div class="flex-1">
+                        <span class="font-bold">#${idx + 1}</span>
+                        <span class="ml-2">${p.username}</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold text-blue-400">${p.score} pts</div>
+                        <div class="text-xs text-gray-400">${p.strikes} ✕</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStatus(msg) {
+            document.getElementById('status').innerText = msg;
+        }
+
+        function updateMultiAnswer() {
+            // Just for multi-select; can add visual feedback here
+        }
+
+        // Tab switch detection
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && currentQuestionId !== null) {
+                fetch('/strike', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.terminate) {
+                            alert('Terminated: Maximum strikes exceeded');
+                            window.location.href = '/';
+                        }
+                    });
+            }
+        });
+
+        // Disable common shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && (['c', 'v', 'u', 's', 'p', 'a'].includes(e.key.toLowerCase()))) {
+                e.preventDefault();
+            }
+        });
+
+        // Resume support
+        {% if resuming %}
+        alert('Session resumed. You may continue from where you left off.');
+        {% endif %}
+    </script>
+</body>
+</html>

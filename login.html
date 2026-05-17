@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Platform - Join</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2">Quiz Platform</h1>
+        <p class="text-gray-400 mb-6 text-sm">Enter quiz PIN and username to join.</p>
+
+        {% if error %}
+        <div class="mb-4 p-3 bg-red-900 border border-red-600 rounded-lg text-red-200 text-sm">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/join" method="POST" class="space-y-4" id="joinForm">
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Quiz PIN</label>
+                <input type="text" name="quiz_pin" required placeholder="e.g. ABC123" maxlength="6" value="{{ prefill_pin }}"
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 uppercase">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Username</label>
+                <input type="text" name="username" required placeholder="Your name or ID"
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500">
+            </div>
+            <button id="joinBtn" type="submit"
+                class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold transition">
+                Join Quiz
+            </button>
+        </form>
+    </div>
+    <script>
+        document.getElementById('joinForm').addEventListener('submit', function () {
+            const btn = document.getElementById('joinBtn');
+            btn.disabled = true;
+            btn.innerText = 'Joining...';
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            btn.classList.add('bg-gray-600', 'cursor-not-allowed');
+        });
+        document.querySelector('input[name="quiz_pin"]').addEventListener('input', function(e) {
+            this.value = this.value.toUpperCase();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-950 text-white min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold">Quiz Admin</h1>
+                <p class="text-gray-400 text-sm mt-1">Manage quizzes and monitor live participants</p>
+            </div>
+            <a href="/admin/logout" class="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg">Logout</a>
+        </div>
+
+        <!-- Quizzes Grid -->
+        <div id="quizzes" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Will be populated by JS -->
+        </div>
+
+        <!-- Create Quiz Button -->
+        <button onclick="showCreateQuizModal()" class="mt-8 px-6 py-3 bg-green-700 hover:bg-green-600 rounded-lg font-bold">
+            ➕ Create New Quiz
+        </button>
+    </div>
+
+    <!-- Create Quiz Modal -->
+    <div id="createQuizModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-xl border border-gray-700 max-w-2xl w-full p-8">
+            <h2 class="text-2xl font-bold mb-6">Create New Quiz</h2>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Quiz Title</label>
+                    <input id="quizTitle" type="text" placeholder="e.g. Python Basics 101" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Questions (JSON)</label>
+                    <textarea id="questionsJSON" placeholder='[{"id":0,"type":"mcq","q":"Question?","options":["A","B"],"correct_option":0}]' class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white h-32 font-mono text-xs"></textarea>
+                    <p class="text-xs text-gray-400 mt-2">Paste JSON array. Types: mcq, true_false, fill_up, multi_correct</p>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="createQuiz()" class="flex-1 px-4 py-2 bg-green-700 hover:bg-green-600 rounded">Create</button>
+                <button onclick="closeCreateQuizModal()" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quiz Detail Modal -->
+    <div id="quizModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-xl border border-gray-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 id="modalTitle" class="text-2xl font-bold">Quiz Name</h2>
+                    <p id="modalPin" class="text-gray-400 text-sm mt-1">PIN: ______</p>
+                </div>
+                <button onclick="closeQuizModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- QR Code -->
+                <div class="bg-gray-700 p-4 rounded-lg flex items-center justify-center">
+                    <img id="modalQR" src="" alt="QR Code" class="w-40 h-40">
+                </div>
+
+                <!-- Quiz Info -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div>
+                        <label class="block text-xs text-gray-400 uppercase mb-1">Quiz PIN</label>
+                        <input id="pinInput" type="text" readonly class="w-full bg-gray-600 border border-gray-500 rounded p-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 uppercase mb-1">Join Link</label>
+                        <input id="linkInput" type="text" readonly class="w-full bg-gray-600 border border-gray-500 rounded p-2 text-xs">
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="copyPin()" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded">Copy PIN</button>
+                        <button onclick="copyLink()" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded">Copy Link</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Questions -->
+            <div class="mb-6">
+                <h3 class="text-lg font-bold mb-4">Questions</h3>
+                <div id="questionsList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+            </div>
+
+            <!-- Leaderboard -->
+            <div class="mb-6">
+                <h3 class="text-lg font-bold mb-4">Live Leaderboard</h3>
+                <div id="leaderboardArea" class="bg-gray-700 p-4 rounded max-h-48 overflow-y-auto text-sm">
+                    <p class="text-gray-500">No participants yet</p>
+                </div>
+            </div>
+
+            <!-- Export -->
+            <div class="flex gap-2">
+                <button onclick="exportStats()" class="flex-1 px-4 py-2 bg-green-700 hover:bg-green-600 rounded">Export Stats</button>
+                <button onclick="closeQuizModal()" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let activeQuiz = null;
+        let allQuizzes = {{ quizzes | tojson }};
+
+        socket.on('connect', () => {
+            renderQuizzes();
+        });
+
+        socket.on('leaderboard_update', (data) => {
+            if (activeQuiz) {
+                renderLeaderboard(data.leaderboard);
+            }
+        });
+
+        function renderQuizzes() {
+            if (!Array.isArray(allQuizzes)) return;
+            const container = document.getElementById('quizzes');
+            const items = allQuizzes.map(q => `
+                <div class="bg-gray-800 rounded-xl border border-gray-700 p-6 cursor-pointer hover:border-blue-500 transition" onclick="openQuiz('${q.id}', '${q.title}', '${q.pin}')">
+                    <h3 class="text-lg font-bold mb-2">${q.title}</h3>
+                    <p class="text-gray-400 text-sm mb-4">PIN: <span class="font-mono font-bold text-blue-400">${q.pin}</span></p>
+                    <div class="flex justify-between text-xs text-gray-500">
+                        <span>${q.questions_data?.length || 0} questions</span>
+                        <span class="px-2 py-1 ${q.state === 'running' ? 'bg-green-900 text-green-300' : 'bg-gray-700'} rounded">${q.state}</span>
+                    </div>
+                </div>
+            `).join('');
+            container.innerHTML = items || '<p class="text-gray-500">No quizzes. Click "Create New Quiz" to start.</p>';
+        }
+
+        function showCreateQuizModal() {
+            document.getElementById('createQuizModal').classList.remove('hidden');
+        }
+
+        function closeCreateQuizModal() {
+            document.getElementById('createQuizModal').classList.add('hidden');
+        }
+
+        function createQuiz() {
+            const title = document.getElementById('quizTitle').value.trim();
+            const questionsStr = document.getElementById('questionsJSON').value.trim();
+            if (!title) { alert('Enter quiz title'); return; }
+            if (!questionsStr) { alert('Paste questions JSON'); return; }
+            try {
+                const questions = JSON.parse(questionsStr);
+                if (!Array.isArray(questions)) throw new Error('Must be array');
+                const form = new FormData();
+                form.append('title', title);
+                form.append('questions_json', questionsStr);
+                fetch('/admin/quiz/new', { method: 'POST', body: form })
+                    .then(r => r.json())
+                    .then(data => {
+                        allQuizzes.push({
+                            id: data.quiz_id,
+                            title: title,
+                            pin: data.pin,
+                            state: 'idle',
+                            questions_data: questions,
+                            active_question_id: null
+                        });
+                        renderQuizzes();
+                        closeCreateQuizModal();
+                        openQuiz(data.quiz_id, title, data.pin);
+                        document.getElementById('quizTitle').value = '';
+                        document.getElementById('questionsJSON').value = '';
+                    })
+                    .catch(e => alert('Error: ' + e));
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+            }
+        }
+
+        function openQuiz(quizId, title, pin) {
+            activeQuiz = quizId;
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalPin').innerText = `PIN: ${pin}`;
+            document.getElementById('pinInput').value = pin;
+            const quiz = allQuizzes.find(q => q.id === quizId);
+            if (quiz && quiz.questions_data) {
+                renderQuestions(quiz.questions_data, quiz.active_question_id, quizId);
+            }
+            const joinUrl = window.location.origin + `/?pin=${pin}`;
+            document.getElementById('linkInput').value = joinUrl;
+            socket.emit('join_quiz', { quiz_id: quizId });
+            socket.emit('get_leaderboard', { quiz_id: quizId });
+            document.getElementById('quizModal').classList.remove('hidden');
+        }
+
+        function closeQuizModal() {
+            document.getElementById('quizModal').classList.add('hidden');
+            activeQuiz = null;
+        }
+
+        function renderQuestions(questions, activeQId, quizId) {
+            const html = (questions || []).map((q, idx) => `
+                <div class="flex justify-between items-center p-3 bg-gray-700 rounded border ${activeQId === idx ? 'border-green-500 bg-green-900/20' : 'border-gray-600'}">
+                    <div class="flex-1">
+                        <div class="font-semibold">Q${idx + 1}: ${q.q ? q.q.substring(0, 60) : '(no text)'}${q.q && q.q.length > 60 ? '...' : ''}</div>
+                        <div class="text-xs text-gray-400 mt-1">${q.type || 'mcq'}</div>
+                    </div>
+                    <div class="flex gap-2">
+                        ${activeQId === idx ? `<button onclick="closeQuestion('${quizId}', ${idx})" class="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-sm">Close</button>` : `<button onclick="openQuestion('${quizId}', ${idx})" class="px-3 py-1 bg-green-700 hover:bg-green-600 rounded text-sm">Open</button>`}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('questionsList').innerHTML = html || '<p class="text-gray-500">No questions</p>';
+        }
+
+        function openQuestion(quizId, qId) {
+            fetch(`/admin/quiz/${quizId}/question/open/${qId}`, { method: 'POST' }).then(() => {
+                const quiz = allQuizzes.find(q => q.id === quizId);
+                if (quiz) {
+                    quiz.active_question_id = qId;
+                    renderQuestions(quiz.questions_data, qId, quizId);
+                }
+            });
+        }
+
+        function closeQuestion(quizId) {
+            fetch(`/admin/quiz/${quizId}/question/close`, { method: 'POST' }).then(() => {
+                const quiz = allQuizzes.find(q => q.id === quizId);
+                if (quiz) {
+                    quiz.active_question_id = null;
+                    renderQuestions(quiz.questions_data, null, quizId);
+                }
+            });
+        }
+
+        function renderLeaderboard(board) {
+            if (!board || board.length === 0) {
+                document.getElementById('leaderboardArea').innerHTML = '<p class="text-gray-500">No participants yet</p>';
+                return;
+            }
+            const html = board.slice(0, 10).map((p, idx) => `
+                <div class="flex justify-between py-2 border-b border-gray-600 last:border-0">
+                    <span>#${idx + 1} <strong>${p.username}</strong></span>
+                    <span class="text-blue-400 font-bold">${p.score} pts</span>
+                </div>
+            `).join('');
+            document.getElementById('leaderboardArea').innerHTML = html;
+        }
+
+        function exportStats() {
+            if (!activeQuiz) return;
+            fetch(`/admin/quiz/${activeQuiz}/stats`)
+                .then(r => r.json())
+                .then(data => {
+                    const csv = 'Username,Score,Total,Strikes,Attended\n' + data.map(s => `${s.username},${s.score},${s.total},${s.strikes},${s.attended ? 'Yes' : 'No'}`).join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `quiz_stats_${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                });
+        }
+
+        function copyPin() {
+            document.getElementById('pinInput').select();
+            document.execCommand('copy');
+        }
+
+        function copyLink() {
+            document.getElementById('linkInput').select();
+            document.execCommand('copy');
+        }
+    </script>
+</body>
+</html><!-- Cache buster: 110038728 -->

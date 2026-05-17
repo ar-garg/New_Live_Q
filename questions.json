@@ -1,0 +1,32 @@
+[
+  {
+    "id": 0,
+    "type": "mcq",
+    "q": "Why is a VAE bottleneck considered 'probabilistic'?",
+    "options": ["It uses Dropout layers", "Latents are sampled from learned distributions", "It outputs random pixels", "It uses stochastic gradient descent"],
+    "correct_option": 1,
+    "time_limit": null
+  },
+  {
+    "id": 1,
+    "type": "true_false",
+    "q": "Is VAE an autoregressive model?",
+    "correct_answer": false,
+    "time_limit": null
+  },
+  {
+    "id": 2,
+    "type": "fill_up",
+    "q": "The 'KL divergence' term in VAE loss encourages the latent distribution to match a ___________ distribution.",
+    "correct_answer": "standard normal",
+    "time_limit": null
+  },
+  {
+    "id": 3,
+    "type": "multi_correct",
+    "q": "Which of the following are properties of VAE?",
+    "options": ["Generative", "Probabilistic", "Supervised", "Discriminative"],
+    "correct_options": [0, 1],
+    "time_limit": null
+  }
+]
