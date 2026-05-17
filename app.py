@@ -29,7 +29,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading',
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'samiscrazy')
 
-DB_PATH = 'quiz_platform.db'
+DB_PATH = os.environ.get('DB_PATH', 'quiz_platform.db')
 engine = create_engine(
     f'sqlite:///{DB_PATH}',
     connect_args={"check_same_thread": False, "timeout": 30},
