@@ -91,7 +91,7 @@ _lb_cache = defaultdict(dict)
 _lb_lock = threading.Lock()
 _lb_pending = set()
 _lb_last_broadcast = {}
-_LB_THROTTLE = 1.0  # max 1 broadcast/second per quiz
+_LB_THROTTLE = 0.25  # broadcast at most 4x/second per quiz
 
 def _lb_update(quiz_id, sess_id, username, correct, speed, strikes):
     with _lb_lock:
@@ -318,9 +318,11 @@ def submit():
 
     with _lb_lock:
         entry = _lb_cache[quiz_id].get(sess_id, {'username': username, 'correct': 0, 'speed_points': 0, 'strikes': 0})
-    _lb_update(quiz_id, sess_id, username,
-               entry['correct'] + (1 if is_correct else 0),
-               entry['speed_points'] + spd, entry['strikes'])
+    new_correct = entry['correct'] + (1 if is_correct else 0)
+    new_speed = entry['speed_points'] + spd
+    _lb_update(quiz_id, sess_id, username, new_correct, new_speed, entry['strikes'])
+    # Emit immediately so first correct answer shows up right away
+    socketio.emit('leaderboard_update', {'leaderboard': _get_sorted_lb(quiz_id)}, room=quiz_id)
 
     answer_id, now = str(uuid.uuid4()), datetime.utcnow()
 
@@ -362,6 +364,7 @@ def log_strike():
         new_strikes = entry['strikes'] + 1
         _lb_cache[quiz_id][sess_id] = {**entry, 'strikes': new_strikes}
         _lb_pending.add(quiz_id)
+    socketio.emit('leaderboard_update', {'leaderboard': _get_sorted_lb(quiz_id)}, room=quiz_id)
 
     answer_id, now = str(uuid.uuid4()), datetime.utcnow()
 
