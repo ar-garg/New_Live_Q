@@ -787,7 +787,7 @@ function showCurrentQuestion(q, qId) {
     label.textContent = 'Q' + (qId + 1) + ' — Now open';
     badge.textContent = typeMap[q.type] || q.type;
     badge.className = 'cq-type-badge' + (isMulti ? ' multi' : '');
-    text.textContent = q.q || '';
+    text.innerHTML = (q.q || '').split('\n').map(function(l){return escHtml(l);}).join('<br>');
 
     var optHtml = '';
     if (q.options) {
@@ -828,7 +828,7 @@ function showAnswerReveal(q, qId, correctAnswer) {
     label.style.color = 'var(--muted)';
     badge.textContent = (typeMap[q.type] || q.type) + ' — Answer revealed';
     badge.className = 'cq-type-badge';
-    textEl.textContent = q.q || '';
+    textEl.innerHTML = (q.q || '').split('\n').map(function(l){return escHtml(l);}).join('<br>');
 
     var optHtml = '';
     if (q.options && correctAnswer) {

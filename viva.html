@@ -528,7 +528,7 @@ function renderQuestion(q) {
         '<div class="q-type-badge' + (qType === 'multi_correct' ? ' multi' : '') + '">' +
         (qType === 'mcq' ? 'Single correct' : qType === 'true_false' ? 'True / False' : qType === 'fill_up' ? 'Fill in the blank' : 'Multi correct — select all that apply') +
         '</div>' +
-        '<div class="q-text">' + escHtml(q.q) + '</div>' +
+        '<div class="q-text">' + q.q.split('\n').map(function(line){return escHtml(line);}).join('<br>') + '</div>' +
         '<div class="options" id="answerArea">';
 
     if (qType === 'mcq') {
@@ -627,9 +627,7 @@ function submitAnswer() {
                 '<div class="result-box">' +
                 '<div class="result-icon">&#10003;</div>' +
                 '<div class="result-text" style="color:var(--muted)">Answer submitted</div>' +
-                '<div style="font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--green);margin-top:0.75rem">' + myCorrect + ' / ' + myTotal + '</div>' +
-                '<div class="result-sub" style="margin-top:0.25rem">correct so far</div>' +
-                '<div class="result-sub" style="margin-top:0.75rem">Results will show when the teacher closes the question.</div>' +
+                '<div class="result-sub" style="margin-top:0.75rem">Results and score will show when the teacher closes the question.</div>' +
                 '</div>';
         }
     }).catch(function() {});
