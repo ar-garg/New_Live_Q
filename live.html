@@ -336,75 +336,98 @@
         }
 
         /* Leaderboard rows */
+        .btn-refresh {
+            font-family: var(--mono);
+            font-size: 1rem;
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.12s, color 0.12s;
+            margin-left: 0.5rem;
+        }
+        .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+
         .lb-row {
             display: flex;
             align-items: center;
-            padding: 0.7rem 1.5rem;
+            padding: 0.9rem 1.5rem;
             border-bottom: 1px solid var(--border);
             gap: 1rem;
-            transition: background 0.1s;
+            transition: background 0.15s;
         }
 
         .lb-row:last-child { border-bottom: none; }
-        .lb-row:hover { background: var(--surface); }
+        .lb-row:hover { background: var(--surface2); }
 
-        .lb-row.rank-1 { background: rgba(245, 200, 66, 0.06); }
-        .lb-row.rank-2 { background: rgba(176, 173, 168, 0.04); }
-        .lb-row.rank-3 { background: rgba(200, 132, 90, 0.04); }
+        .lb-row.rank-1 { background: rgba(245,200,66,0.08); border-left: 3px solid var(--gold); }
+        .lb-row.rank-2 { background: rgba(176,173,168,0.06); border-left: 3px solid var(--silver); }
+        .lb-row.rank-3 { background: rgba(200,132,90,0.06); border-left: 3px solid var(--bronze); }
+        .lb-row:not(.rank-1):not(.rank-2):not(.rank-3) { border-left: 3px solid transparent; }
 
         .lb-rank {
             font-family: var(--mono);
-            font-size: 1rem;
+            font-size: 1.5rem;
             font-weight: 700;
-            width: 2.5rem;
+            width: 3rem;
             flex-shrink: 0;
             text-align: center;
+            line-height: 1;
         }
 
-        .rank-1 .lb-rank { color: var(--gold); }
-        .rank-2 .lb-rank { color: var(--silver); }
-        .rank-3 .lb-rank { color: var(--bronze); }
-        .lb-row:not(.rank-1):not(.rank-2):not(.rank-3) .lb-rank { color: var(--muted); font-size: 0.85rem; }
+        .rank-1 .lb-rank { color: var(--gold); font-size: 1.8rem; }
+        .rank-2 .lb-rank { color: var(--silver); font-size: 1.6rem; }
+        .rank-3 .lb-rank { color: var(--bronze); font-size: 1.5rem; }
+        .lb-row:not(.rank-1):not(.rank-2):not(.rank-3) .lb-rank { color: var(--muted); font-size: 1rem; font-weight: 500; }
 
         .lb-name {
-            font-size: 1.05rem;
-            font-weight: 600;
+            font-size: 1.2rem;
+            font-weight: 700;
             flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            letter-spacing: 0.01em;
         }
 
-        .rank-1 .lb-name { font-size: 1.15rem; }
+        .rank-1 .lb-name { font-size: 1.4rem; color: var(--gold); }
+        .rank-2 .lb-name { font-size: 1.25rem; }
 
         .lb-stats {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
             flex-shrink: 0;
+            gap: 0.1rem;
         }
 
         .lb-correct {
             font-family: var(--mono);
-            font-size: 1.1rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: var(--green);
+            line-height: 1;
         }
 
-        .rank-1 .lb-correct { font-size: 1.3rem; }
+        .rank-1 .lb-correct { font-size: 1.8rem; }
+        .rank-2 .lb-correct { font-size: 1.6rem; }
 
         .lb-speed {
             font-family: var(--mono);
-            font-size: 0.65rem;
+            font-size: 0.68rem;
             color: var(--muted);
-            margin-top: 0.1rem;
         }
 
         .lb-strikes {
             font-family: var(--mono);
             font-size: 0.65rem;
             color: var(--red);
-            margin-top: 0.05rem;
         }
 
         .lb-empty {
@@ -414,7 +437,7 @@
             font-size: 0.9rem;
         }
 
-        .lb-empty-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.4; }
+        .lb-empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.4; }
 
         /* Bottom bar */
         .bottom-bar {
@@ -447,23 +470,23 @@
 
         .current-q-panel {
             flex-shrink: 0;
-            border-top: 1px solid var(--border);
+            border-top: 2px solid var(--green-dim);
             background: var(--surface);
-            padding: 0.875rem 1.5rem;
-            max-height: 200px;
+            padding: 1rem 1.5rem 1.1rem;
+            max-height: 260px;
             overflow-y: auto;
         }
 
         .cq-header {
             display: flex;
             align-items: center;
-            gap: 0.625rem;
-            margin-bottom: 0.4rem;
+            gap: 0.75rem;
+            margin-bottom: 0.6rem;
         }
 
         .cq-label {
             font-family: var(--mono);
-            font-size: 0.65rem;
+            font-size: 0.7rem;
             font-weight: 500;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -472,45 +495,71 @@
 
         .cq-type-badge {
             font-family: var(--mono);
-            font-size: 0.6rem;
+            font-size: 0.65rem;
             font-weight: 500;
             letter-spacing: 0.06em;
             text-transform: uppercase;
-            padding: 0.15rem 0.45rem;
+            padding: 0.2rem 0.55rem;
             border-radius: 3px;
             background: var(--surface2);
             border: 1px solid var(--border);
             color: var(--muted);
         }
 
-        .cq-type-badge.multi { background: rgba(232,160,32,0.12); border-color: var(--accent-dark); color: var(--accent); }
+        .cq-type-badge.multi { background: rgba(232,160,32,0.15); border-color: var(--accent-dark); color: var(--accent); font-size: 0.7rem; }
 
         .cq-text {
-            font-size: 0.9rem;
-            font-weight: 600;
+            font-size: 1.15rem;
+            font-weight: 700;
             color: var(--text);
-            line-height: 1.4;
-            margin-bottom: 0.5rem;
+            line-height: 1.45;
+            margin-bottom: 0.75rem;
         }
 
         .cq-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.5rem;
         }
 
         .cq-opt {
             font-family: var(--mono);
-            font-size: 0.72rem;
-            padding: 0.2rem 0.5rem;
-            border-radius: 3px;
+            font-size: 0.82rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 4px;
             border: 1px solid var(--border);
-            color: var(--muted);
+            color: var(--text);
             background: var(--surface2);
+            line-height: 1.3;
+        }
+
+        .cq-opt.correct-opt {
+            border-color: var(--green-dim);
+            background: var(--green-bg);
+            color: var(--green);
+        }
+
+        .cq-answer-reveal {
+            margin-top: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--green-bg);
+            border: 1px solid var(--green-dim);
+            border-radius: 4px;
+            font-size: 0.82rem;
+            color: var(--green);
+            font-family: var(--mono);
+        }
+
+        .cq-answer-label {
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            opacity: 0.7;
+            margin-bottom: 0.2rem;
         }
 
         .cq-no-question {
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             color: var(--muted);
             font-style: italic;
         }
@@ -562,6 +611,7 @@
             <div class="lb-title">Leaderboard</div>
             <div class="lb-subtitle">Most correct → fastest</div>
             <div class="lb-count" id="participantCount">0 participants</div>
+            <button class="btn-refresh" onclick="refreshLb()" title="Refresh leaderboard">↻</button>
         </div>
         <div class="lb-body" id="lbBody">
             <div class="lb-empty">
@@ -601,6 +651,7 @@ document.getElementById('qrImg').src = qrB64 ? 'data:image/png;base64,' + qrB64
 const socket = io();
 let activeQId = quizData.active_question_id;
 let answerCounts = {};
+let lastQuestion = null;
 
 socket.on('connect', function() {
     socket.emit('join_quiz', { quiz_id: quizId });
@@ -609,19 +660,24 @@ socket.on('connect', function() {
 
 socket.on('question_opened', function(data) {
     activeQId = data.question_id;
+    lastQuestion = data.question;
     updateStatusPill(true);
     renderQControls();
     showCurrentQuestion(data.question, data.question_id);
 });
 
-socket.on('question_closed', function() {
+socket.on('question_closed', function(data) {
+    var correctAnswer = data && data.correct_answer ? data.correct_answer : null;
     if (activeQId !== null) {
         answerCounts[activeQId] = (answerCounts[activeQId] || 0);
+        // Show answer reveal in panel
+        if (lastQuestion) {
+            showAnswerReveal(lastQuestion, activeQId, correctAnswer);
+        }
     }
     activeQId = null;
     updateStatusPill(false);
     renderQControls();
-    hideCurrentQuestion();
 });
 
 socket.on('leaderboard_update', function(data) {
@@ -746,7 +802,44 @@ function hideCurrentQuestion() {
 
 // Show if question already open on page load
 if (activeQId !== null && quizData.questions_data && quizData.questions_data[activeQId]) {
-    showCurrentQuestion(quizData.questions_data[activeQId], activeQId);
+    lastQuestion = quizData.questions_data[activeQId];
+    showCurrentQuestion(lastQuestion, activeQId);
+}
+
+function showAnswerReveal(q, qId, correctAnswer) {
+    var panel = document.getElementById('currentQPanel');
+    var label = document.getElementById('cqLabel');
+    var badge = document.getElementById('cqTypeBadge');
+    var textEl = document.getElementById('cqText');
+    var opts = document.getElementById('cqOptions');
+
+    var typeMap = {
+        'mcq': 'Single correct', 'true_false': 'True / False',
+        'fill_up': 'Fill in the blank', 'multi_correct': 'Multi correct'
+    };
+    label.textContent = 'Q' + (qId + 1) + ' — Closed';
+    label.style.color = 'var(--muted)';
+    badge.textContent = (typeMap[q.type] || q.type) + ' — Answer revealed';
+    badge.className = 'cq-type-badge';
+    textEl.textContent = q.q || '';
+
+    var optHtml = '';
+    if (q.options && correctAnswer) {
+        var correctList = correctAnswer.split(', ');
+        q.options.forEach(function(opt, i) {
+            var isCorrect = correctList.indexOf(opt) !== -1;
+            optHtml += '<span class="cq-opt' + (isCorrect ? ' correct-opt' : '') + '">' +
+                String.fromCharCode(65+i) + '. ' + escHtml(opt) + (isCorrect ? ' ✓' : '') + '</span>';
+        });
+    } else if (correctAnswer) {
+        optHtml = '<span class="cq-opt correct-opt">✓ ' + escHtml(correctAnswer) + '</span>';
+    }
+    opts.innerHTML = optHtml;
+    panel.style.display = 'block';
+}
+
+function refreshLb() {
+    socket.emit('get_leaderboard', { quiz_id: quizId });
 }
 
 function escHtml(str) {
