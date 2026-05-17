@@ -1,92 +1,30 @@
-# 🎯 Live_Q
+# Live_Q
 
-Interactive real-time quiz platform with live leaderboards, attendance tracking, and teacher-controlled question flow. Designed for classrooms, coding contests, workshops, and high-engagement sessions.
-
----
-
-# ✨ Features
-
-## 📚 Quiz Types Supported
-- Multiple Choice Questions (MCQ)
-- True / False
-- Fill in the Blank
-- Multi-correct Questions
-
-## 📊 Live Leaderboard
-- Real-time score updates
-- Speed-based tie breaker
-- Instant classroom engagement
-
-## 🎮 Teacher Controls
-- Open/close questions manually
-- Flexible pacing during class
-- Multiple simultaneous quizzes
-
-## 🔐 Session & Anti-Cheat
-- Resume after disconnect
-- Tab-switch detection
-- 3-strike auto termination system
-
-## 📝 Attendance Tracking
-- Automatic attendance logging
-- Exportable participation data
-
-## 📱 QR Code Access
-- Auto-generated QR per quiz PIN
-- Quick student onboarding
+Real-time quiz platform for classrooms. Teachers control questions live, students answer on their phones, leaderboard updates instantly.
 
 ---
 
-# 🛠️ Tech Stack
+## Live URLs
 
-| Component | Technology |
+| Purpose | URL |
 |---|---|
-| Backend | Flask + Flask-SocketIO |
-| Database | SQLite + SQLAlchemy |
-| Frontend | HTML + Tailwind CSS + JavaScript |
-| Realtime Communication | WebSockets |
-| QR Generation | qrcode |
+| Student Join | https://live-q-2xag.onrender.com |
+| Admin Dashboard | https://live-q-2xag.onrender.com/admin |
 
 ---
 
-# ⚙️ Setup
+## Question Types
 
-## 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## 2. Configure Environment Variables (Optional)
-
-### Linux / macOS
-
-```bash
-export SECRET_KEY="your-secret-key"
-export ADMIN_PASSWORD="your-admin-password"
-```
-
-### Windows PowerShell
-
-```powershell
-$env:SECRET_KEY="your-secret-key"
-$env:ADMIN_PASSWORD="your-admin-password"
-```
-
-### Default Values
-
-```text
-SECRET_KEY = cs671-viva-g27
-ADMIN_PASSWORD = samiscrazy
-```
+| Type | Key | Description |
+|---|---|---|
+| Multiple Choice | `mcq` | One correct option |
+| True / False | `true_false` | Boolean answer |
+| Fill in the Blank | `fill_up` | Text match |
+| Multi-correct | `multi_correct` | Multiple correct options |
 
 ---
 
-# 🧩 Question Format
-
-Edit `questions.json`
+## Question JSON Format
 
 ```json
 [
@@ -97,214 +35,145 @@ Edit `questions.json`
     "options": ["A", "B", "C", "D"],
     "correct_option": 1,
     "time_limit": null
+  },
+  {
+    "id": 1,
+    "type": "true_false",
+    "q": "Statement to evaluate.",
+    "correct_answer": false,
+    "time_limit": null
+  },
+  {
+    "id": 2,
+    "type": "fill_up",
+    "q": "The answer is ___.",
+    "correct_answer": "answer",
+    "time_limit": null
+  },
+  {
+    "id": 3,
+    "type": "multi_correct",
+    "q": "Select all that apply.",
+    "options": ["A", "B", "C", "D"],
+    "correct_options": [0, 2],
+    "time_limit": null
   }
 ]
 ```
 
+`time_limit`: `null` means teacher closes manually. A number (seconds) auto-closes the question.
+
 ---
 
-## Supported Question Types
+## Scoring
 
-| Type | Description |
+| Component | Rule |
 |---|---|
-| `mcq` | Single correct option |
-| `true_false` | Boolean answer |
-| `fill_up` | Text-based answer |
-| `multi_correct` | Multiple correct options |
+| Correct answer | +1 to correct count |
+| Speed points | 0–1000 based on time taken, only if fully correct |
+| Multi-correct | +1 per correct option selected, -1 per wrong option, min 0 |
+| Strike | Question marked incorrect, student stays in quiz |
+
+**Leaderboard ranks by:** most correct answers first, then highest speed points.
 
 ---
 
-## ⏱️ Time Limit
+## Strike System
 
-```json
-"time_limit": null
-```
-
-- `null` → Teacher manually closes question
-- Number → Auto closes after given seconds
+A strike is logged when a student switches tabs or minimises the browser while a question is open. The question is immediately marked incorrect. The student is **not** removed from the quiz. Strikes are shown in the exported stats.
 
 ---
 
-# ▶️ Run Locally
+## Teacher Workflow
+
+1. Go to `/admin` and log in
+2. Create a quiz — paste the questions JSON and give it a title
+3. Share the PIN or QR code with students
+4. Open questions one at a time
+5. Close a question to reveal the correct answer to students
+6. Export stats as XLSX when done
+
+---
+
+## Student Workflow
+
+1. Go to the join URL or scan the QR code
+2. Enter the PIN and your name / student ID
+3. Answer each question when it opens
+4. Results and correct answer show after the teacher closes the question
+5. If you disconnect, rejoin with the same name to resume
+
+---
+
+## Scoring Export (XLSX)
+
+Two sheets:
+
+**Sheet 1 — Student Details**
+`Username | Total Correct | Speed Points | Strikes | Q1 Result | Q1 Speed Pts | Q2 Result | ...`
+
+Result values: `Correct`, `Wrong`, `Strike`, `N/A`
+
+**Sheet 2 — Question Summary**
+`Q# | Question | Type | Correct | Wrong | Not Attempted | Correct %`
+
+---
+
+## Running Locally
 
 ```bash
+pip install -r requirements.txt
 python app.py
 ```
 
-Server runs at:
-
-```text
-http://localhost:5001
-```
+Server runs at `http://localhost:5001`
 
 ---
 
-# 👨‍🎓 Student Access
+## Environment Variables
 
-```text
-http://localhost:5001/
-```
-
-Students enter:
-- Quiz PIN
-- Username
-
----
-
-# 👨‍🏫 Admin Access
-
-```text
-http://localhost:5001/admin/login
-```
-
-Default Password:
-
-```text
-samiscrazy
-```
+| Variable | Default | Description |
+|---|---|---|
+| `SECRET_KEY` | `ur_key` | Flask session key |
+| `ADMIN_PASSWORD` | `ur_pass` | Admin login password |
+| `PORT` | `ur_port` | Port to run on |
+| `DB_PATH` | `quiz_platform.db` | SQLite database path |
 
 ---
 
-# ☁️ Deploy on Render
+## Tech Stack
 
-## 1. Push to GitHub
+| Component | Technology |
+|---|---|
+| Backend | Flask + Flask-SocketIO |
+| Database | SQLite + SQLAlchemy |
+| Frontend | HTML + CSS + JavaScript |
+| Realtime | WebSockets |
+| QR Generation | qrcode + Pillow |
+| Export | openpyxl |
+
+---
+
+## Resetting Data
+
+Wipe everything and start fresh:
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/Live_Q.git
-git push -u origin main
+del quiz_platform.db   # Windows
+rm quiz_platform.db    # Mac/Linux
+python app.py
+```
+
+Clear only student sessions (keep quizzes):
+
+```bash
+python -c "from app import SessionLocal, Answer, QuizSession; db=SessionLocal(); db.query(Answer).delete(); db.query(QuizSession).delete(); db.commit(); db.close(); print('Cleared')"
 ```
 
 ---
 
-## 2. Create Render Service
+## Notes
 
-Go to:
-
-https://render.com
-
-### Configuration
-
-| Setting | Value |
-|---|---|
-| Environment | Python 3 |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `python app.py` |
-
-Add environment variables:
-- `SECRET_KEY`
-- `ADMIN_PASSWORD`
-
----
-
-# 🔥 Teacher Workflow
-
-1. Login as admin
-2. Create quiz
-3. Share PIN or QR code
-4. Open questions live
-5. Watch leaderboard update in real time
-6. Export results & attendance
-
----
-
-# 🛡️ Strike System
-
-### Triggered By
-- Tab switching
-- Browser minimize
-
-### Penalty
-- Answer marked incorrect
-- Strike count increases
-
-### Limit
-- 3 strikes → session terminated
-
----
-
-# 🏆 Leaderboard Logic
-
-## Ranking Priority
-
-1. Highest score
-2. Fastest total response time
-
----
-
-# 🗄️ Database Models
-
-| Model | Purpose |
-|---|---|
-| Quiz | Quiz metadata |
-| QuizSession | Student session data |
-| Answer | Individual submissions |
-
-Database file:
-
-```text
-quiz_platform.db
-```
-
----
-
-# 🔌 API Endpoints
-
-## Student Routes
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/join` | POST | Join quiz |
-| `/quiz` | GET | Quiz page |
-| `/submit` | POST | Submit answer |
-| `/strike` | POST | Log strike |
-| `/result` | GET | Final score |
-
----
-
-## Admin Routes
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/admin/login` | POST | Login |
-| `/admin` | GET | Dashboard |
-| `/admin/quiz/new` | POST | Create quiz |
-| `/admin/quiz/<id>/question/open/<q_id>` | POST | Open question |
-| `/admin/quiz/<id>/question/close` | POST | Close question |
-
----
-
-# 📡 WebSocket Events
-
-| Event | Purpose |
-|---|---|
-| `join_quiz` | Join room |
-| `question_opened` | Broadcast question |
-| `question_closed` | Close active question |
-| `leaderboard_update` | Sync leaderboard |
-
----
-
-# 🚀 Future Enhancements
-
-- Scheduled question release
-- Advanced analytics dashboard
-- Mobile admin app
-- Adaptive scoring
-- AI-generated questions
-- Classroom insights
-
----
-
-# 📜 License
-
-MIT License
-
----
-
-# 👨‍💻 Author
-
-Built for high-engagement classroom experiences and live competitive learning.
+- Free Render tier spins down after 15 min of inactivity — first request takes ~30s to wake up
+- SQLite database resets on Render redeploy (free tier has no persistent disk) — create quizzes fresh each session or upgrade to a paid tier with persistent disk
+- For persistent storage across deploys, set `DB_PATH=/tmp/quiz_platform.db` or switch to PostgreSQL
