@@ -620,6 +620,58 @@ def quiz_export(quiz_id):
         return Response(out.getvalue(), mimetype='text/csv',
                         headers={'Content-Disposition': 'attachment;filename=quiz_stats.csv'})
 
+
+@app.route('/admin/quiz/<quiz_id>/delete', methods=['POST'])
+def delete_quiz(quiz_id):
+    if not session.get('admin'):
+        return '', 403
+    db = SessionLocal()
+    sessions = db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id).all()
+    for s in sessions:
+        db.query(Answer).filter(Answer.session_id == s.id).delete()
+    db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id).delete()
+    db.query(Quiz).filter(Quiz.id == quiz_id).delete()
+    db.commit()
+    db.close()
+    with _lb_lock:
+        _lb_cache.pop(quiz_id, None)
+    return jsonify({'ok': True})
+
+@app.route('/admin/quiz/delete_all', methods=['POST'])
+def delete_all_quizzes():
+    if not session.get('admin'):
+        return '', 403
+    db = SessionLocal()
+    db.query(Answer).delete()
+    db.query(QuizSession).delete()
+    db.query(Quiz).delete()
+    db.commit()
+    db.close()
+    with _lb_lock:
+        _lb_cache.clear()
+    return jsonify({'ok': True})
+
+@app.route('/admin/quiz/<quiz_id>/user/<username>/delete', methods=['POST'])
+def delete_user_responses(quiz_id, username):
+    if not session.get('admin'):
+        return '', 403
+    db = SessionLocal()
+    sess = db.query(QuizSession).filter(
+        QuizSession.quiz_id == quiz_id,
+        QuizSession.username.ilike(username)
+    ).first()
+    if sess:
+        db.query(Answer).filter(Answer.session_id == sess.id).delete()
+        db.delete(sess)
+        db.commit()
+        with _lb_lock:
+            _lb_cache[quiz_id].pop(sess.id, None)
+            _lb_pending.add(quiz_id)
+        lb = _get_sorted_lb(quiz_id)
+        socketio.emit('leaderboard_update', {'leaderboard': lb}, room=quiz_id)
+    db.close()
+    return jsonify({'ok': True})
+
 # ─── WEBSOCKET ─────────────────────────────────────────────────────────────────
 
 @socketio.on('join_quiz')

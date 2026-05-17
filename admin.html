@@ -130,7 +130,10 @@
             <div class="page-title">Quizzes</div>
             <div class="page-sub">Click any quiz to open it, share the PIN, and control questions live.</div>
         </div>
-        <button class="btn-primary" onclick="showCreate()">+ New Quiz</button>
+        <div style="display:flex;gap:0.5rem;">
+            <button class="btn-primary" onclick="showCreate()">+ New Quiz</button>
+            <button class="btn-del-all" onclick="deleteAllQuizzes()">Delete All</button>
+        </div>
     </div>
     <div id="quizGrid"></div>
 </div>
@@ -236,7 +239,10 @@ function renderGrid() {
                 <span class="state-badge ${q.state==='running'?'state-running':'state-idle'}">${q.state}</span>
             </div>
             <div class="quiz-pin">${q.pin}</div>
-            <div class="quiz-meta">${q.questions_data?.length||0} questions</div>
+            <div class="quiz-meta" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>${q.questions_data?.length||0} questions</span>
+                <button class="btn-del-quiz" onclick="event.stopPropagation();deleteQuiz('${q.id}','${q.title}')" title="Delete quiz">Delete</button>
+            </div>
         </div>
     `).join('') + '</div>';
 }
@@ -331,6 +337,39 @@ function renderLB(board) {
 }
 
 function exportStats() { if (activeQuiz) window.open(`/admin/quiz/${activeQuiz}/export`, '_blank'); }
+
+function deleteQuiz(quizId, title) {
+    if (!confirm('Delete quiz "' + title + '"?\n\nThis will permanently remove the quiz and all student responses. This cannot be undone.')) return;
+    fetch('/admin/quiz/' + quizId + '/delete', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function() {
+            allQuizzes = allQuizzes.filter(function(q) { return q.id !== quizId; });
+            if (activeQuiz === quizId) hideQuiz();
+            renderGrid();
+        });
+}
+
+function deleteAllQuizzes() {
+    if (!confirm('Delete ALL quizzes?\n\nThis removes every quiz and all student responses permanently. This cannot be undone.')) return;
+    fetch('/admin/quiz/delete_all', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function() {
+            allQuizzes = [];
+            activeQuiz = null;
+            hideQuiz();
+            renderGrid();
+        });
+}
+
+function deleteUser(username) {
+    if (!activeQuiz) return;
+    if (!confirm('Delete all responses from "' + username + '"?\n\nThis removes their session and answers from this quiz. This cannot be undone.')) return;
+    fetch('/admin/quiz/' + activeQuiz + '/user/' + encodeURIComponent(username) + '/delete', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function() {
+            socket.emit('get_leaderboard', { quiz_id: activeQuiz });
+        });
+}
 
 function copyVal(id, btn) {
     navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
