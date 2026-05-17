@@ -448,6 +448,30 @@ def admin_quizzes():
     db.close()
     return jsonify(data)
 
+
+@app.route('/admin/live/<quiz_id>')
+def live_view(quiz_id):
+    if not session.get('admin'):
+        return redirect(url_for('admin_login'))
+    db = SessionLocal()
+    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
+    if not quiz:
+        db.close()
+        return redirect(url_for('admin_dashboard'))
+    join_url = request.host_url.rstrip('/') + f'/?pin={quiz.pin}'
+    qr_b64 = gen_qr(join_url)
+    quiz_data = {
+        'id': quiz.id,
+        'title': quiz.title,
+        'pin': quiz.pin,
+        'state': quiz.state,
+        'questions_data': quiz.questions_data,
+        'active_question_id': quiz.active_question_id
+    }
+    db.close()
+    return render_template('live.html', quiz_id=quiz_id, quiz=quiz_data,
+                           join_url=join_url, qr_b64=qr_b64)
+
 @app.route('/admin/quiz/new', methods=['POST'])
 def create_quiz():
     if not session.get('admin'):

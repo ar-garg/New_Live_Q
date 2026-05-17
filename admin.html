@@ -102,6 +102,8 @@
         /* MODAL BUTTONS */
         .btn-export { font-family: var(--sans); font-size: 0.82rem; font-weight: 600; background: var(--accent); color: var(--text); border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: opacity 0.15s; }
         .btn-export:hover { opacity: 0.85; }
+        .btn-live { font-family: var(--sans); font-size: 0.82rem; font-weight: 600; background: var(--green); color: #fff; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: opacity 0.15s; }
+        .btn-live:hover { opacity: 0.85; }
         .btn-secondary { font-family: var(--sans); font-size: 0.82rem; font-weight: 500; background: none; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
         .btn-secondary:hover { border-color: var(--border-dark); color: var(--text); }
 
@@ -204,6 +206,7 @@
         </div>
         <div class="modal-footer">
             <button class="btn-secondary" onclick="hideQuiz()">Close</button>
+            <button class="btn-live" onclick="openLiveView()">Live View</button>
             <button class="btn-export" onclick="exportStats()">Export XLSX</button>
         </div>
     </div>
@@ -369,6 +372,14 @@ function deleteUser(username) {
         .then(function() {
             socket.emit('get_leaderboard', { quiz_id: activeQuiz });
         });
+}
+
+function openLiveView() {
+    if (!activeQuiz) return;
+    const q = allQuizzes.find(x => x.id === activeQuiz);
+    if (!q) return;
+    const url = window.location.origin + '/admin/live/' + activeQuiz;
+    window.open(url, '_blank', 'noopener');
 }
 
 function copyVal(id, btn) {
