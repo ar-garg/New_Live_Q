@@ -331,7 +331,29 @@
         <div class="q-body" id="questionContainer">
             <div class="q-waiting">
                 <div class="q-waiting-icon">⏳</div>
-                <div>Quiz will begin when the teacher opens the first question.</div>
+                <div style="font-size:1rem;font-weight:600;margin-bottom:1.25rem;">Waiting for teacher to open a question.</div>
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1rem 1.25rem;text-align:left;max-width:340px;margin:0 auto;">
+                    <div style="font-family:var(--mono);font-size:0.62rem;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.75rem;">Marking Scheme</div>
+                    <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.82rem;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="color:var(--text);">Correct answer</span>
+                            <span style="font-family:var(--mono);font-weight:700;color:var(--green);">+1</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="color:var(--text);">Wrong answer</span>
+                            <span style="font-family:var(--mono);font-weight:700;color:var(--muted);">0</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="color:var(--text);">Tab switch / strike</span>
+                            <span style="font-family:var(--mono);font-weight:700;color:var(--muted);">0</span>
+                        </div>
+                        <div style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;display:flex;justify-content:space-between;align-items:center;">
+                            <span style="color:var(--text);">Speed points (tie-breaker)</span>
+                            <span style="font-family:var(--mono);font-weight:700;color:var(--accent-dark);">0–1000</span>
+                        </div>
+                    </div>
+                    <div style="font-size:0.72rem;color:var(--muted);margin-top:0.75rem;line-height:1.5;">Speed points only apply on correct answers. Leaderboard ranks by most correct first, then speed.</div>
+                </div>
             </div>
         </div>
         <div class="q-timer" id="timerBar" style="display:none;">
@@ -370,6 +392,8 @@ let answeredQuestions = new Set();
 let lastAnswerData = null;
 let isActiveTab = false;
 let lbOpen = false;
+let myCorrect = 0;
+let myTotal = 0;
 
 // Tab lock
 const TAB_KEY = 'lq_tab_' + quizId + '_' + username;
@@ -427,7 +451,7 @@ socket.on('question_closed', function(data) {
     var correctAnswer = (data && data.correct_answer) ? data.correct_answer : null;
     if (submitted && lastAnswerData !== null) {
         // Student answered — show correct/incorrect + correct answer
-        showAnswerReveal(lastAnswerData, correctAnswer);
+        showAnswerReveal(lastAnswerData, correctAnswer, myCorrect, myTotal);
     } else if (submitted && lastAnswerData === null) {
         // Strike case — just show correct answer
         var html = '<div class="result-box"><div class="result-icon">⚠</div><div class="result-text" style="color:var(--yellow)">Strike recorded</div>';
@@ -464,26 +488,30 @@ function handleQuestionOpened(data) {
     questionStartTime = Date.now();
     submitted = false;
     lastAnswerData = null;
+    myTotal++;
     renderQuestion(data.question);
     startTimer(data.question.time_limit);
     updateStatus('Q' + (data.question_id + 1) + ' — Answer now', true);
 }
 
-function showAnswerReveal(submitData, correctAnswer) {
+function showAnswerReveal(submitData, correctAnswer, correct, total) {
     var isCorrect = submitData.is_correct;
     var color = isCorrect ? 'var(--green)' : 'var(--red)';
     var icon = isCorrect ? '✓' : '✗';
     var label = isCorrect ? 'Correct' : 'Incorrect';
     var speedLine = (submitData.speed_points > 0) ? '<div class="result-speed">+' + submitData.speed_points + ' speed points</div>' : '';
     var answerLine = '';
-    if (correctAnswer && !isCorrect) {
+    if (correctAnswer) {
         answerLine = '<div class="result-correct-answer"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
     }
+    var scoreLine = (correct !== undefined && total !== undefined)
+        ? '<div style="font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--green);margin-top:0.75rem">' + correct + ' / ' + total + '</div><div class="result-sub">correct so far</div>'
+        : '';
     document.getElementById('questionContainer').innerHTML =
         '<div class="result-box">' +
         '<div class="result-icon">' + icon + '</div>' +
         '<div class="result-text" style="color:' + color + '">' + label + '</div>' +
-        speedLine + answerLine +
+        speedLine + scoreLine + answerLine +
         '<div class="result-sub" style="margin-top:0.75rem">Waiting for the teacher to continue…</div>' +
         '</div>';
 }
@@ -594,10 +622,13 @@ function submitAnswer() {
             answeredQuestions.add(Number(qId));
             answeredQuestions.add(String(qId));
             lastAnswerData = data;
+            if (data.is_correct) myCorrect++;
             document.getElementById('questionContainer').innerHTML =
                 '<div class="result-box">' +
                 '<div class="result-icon">&#10003;</div>' +
                 '<div class="result-text" style="color:var(--muted)">Answer submitted</div>' +
+                '<div style="font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--green);margin-top:0.75rem">' + myCorrect + ' / ' + myTotal + '</div>' +
+                '<div class="result-sub" style="margin-top:0.25rem">correct so far</div>' +
                 '<div class="result-sub" style="margin-top:0.75rem">Results will show when the teacher closes the question.</div>' +
                 '</div>';
         }

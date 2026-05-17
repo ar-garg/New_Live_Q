@@ -529,7 +529,7 @@ def close_question(quiz_id):
         db.commit()
         socketio.emit('question_closed', {'correct_answer': correct_answer}, room=quiz_id)
     db.close()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'correct_answer': correct_answer if quiz else None})
 
 @app.route('/admin/quiz/<quiz_id>/stats')
 def quiz_stats(quiz_id):

@@ -668,12 +668,9 @@ socket.on('question_opened', function(data) {
 
 socket.on('question_closed', function(data) {
     var correctAnswer = data && data.correct_answer ? data.correct_answer : null;
-    if (activeQId !== null) {
+    if (activeQId !== null && lastQuestion) {
+        showAnswerReveal(lastQuestion, activeQId, correctAnswer);
         answerCounts[activeQId] = (answerCounts[activeQId] || 0);
-        // Show answer reveal in panel
-        if (lastQuestion) {
-            showAnswerReveal(lastQuestion, activeQId, correctAnswer);
-        }
     }
     activeQId = null;
     updateStatusPill(false);
@@ -724,9 +721,19 @@ function openQ(qId) {
 }
 
 function closeQ() {
+    var qIdToClose = activeQId;
+    var qToReveal = lastQuestion;
     fetch('/admin/quiz/' + quizId + '/question/close', { method: 'POST' })
         .then(function(r) { return r.json(); })
-        .then(function() {
+        .then(function(data) {
+            // Show answer reveal immediately when admin clicks close
+            if (qIdToClose !== null && qToReveal) {
+                var correctAnswer = data && data.correct_answer ? data.correct_answer : null;
+                showAnswerReveal(qToReveal, qIdToClose, correctAnswer);
+            }
+            if (qIdToClose !== null) {
+                answerCounts[qIdToClose] = (answerCounts[qIdToClose] || 0);
+            }
             activeQId = null;
             updateStatusPill(false);
             renderQControls();
