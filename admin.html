@@ -3,280 +3,341 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Live_Q — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #F5F4F0; --surface: #FFFFFF; --border: #D9D7D0; --border-dark: #B8B5AC;
+            --text: #1A1A18; --muted: #6B6A63; --accent: #E8A020; --accent-dark: #C8880E;
+            --green: #2D7A4F; --green-bg: #EDF7F2;
+            --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+        }
+        body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        /* TOPBAR */
+        .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 52px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .brand { font-family: var(--mono); font-size: 1rem; font-weight: 500; letter-spacing: 0.05em; }
+        .brand span { color: var(--accent); }
+        .topbar-right { display: flex; align-items: center; gap: 1rem; }
+        .topbar-label { font-size: 0.78rem; color: var(--muted); }
+        .btn-logout { font-family: var(--sans); font-size: 0.8rem; font-weight: 500; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 4px; padding: 0.35rem 0.75rem; cursor: pointer; text-decoration: none; transition: border-color 0.15s, color 0.15s; }
+        .btn-logout:hover { border-color: var(--border-dark); color: var(--text); }
+
+        /* MAIN */
+        .main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
+        .page-title { font-size: 1.1rem; font-weight: 600; }
+        .page-sub { font-size: 0.82rem; color: var(--muted); margin-top: 0.2rem; }
+        .btn-primary { font-family: var(--sans); font-size: 0.85rem; font-weight: 600; background: var(--text); color: #fff; border: none; border-radius: 4px; padding: 0.55rem 1.1rem; cursor: pointer; transition: opacity 0.15s; }
+        .btn-primary:hover { opacity: 0.82; }
+
+        /* QUIZ GRID */
+        .quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .quiz-card { background: var(--surface); padding: 1.25rem 1.5rem; cursor: pointer; transition: background 0.1s; }
+        .quiz-card:hover { background: #FAFAF8; }
+        .quiz-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 0.6rem; }
+        .quiz-title { font-size: 0.95rem; font-weight: 600; line-height: 1.3; }
+        .state-badge { font-family: var(--mono); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 3px; flex-shrink: 0; margin-left: 0.75rem; }
+        .state-running { background: var(--green-bg); color: var(--green); }
+        .state-idle { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+        .quiz-pin { font-family: var(--mono); font-size: 1.1rem; font-weight: 500; letter-spacing: 0.15em; color: var(--accent-dark); margin-bottom: 0.4rem; }
+        .quiz-meta { font-size: 0.75rem; color: var(--muted); }
+        .empty-state { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
+
+        /* MODALS */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(26,26,24,0.5); z-index: 200; align-items: center; justify-content: center; padding: 1.5rem; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; width: 100%; max-width: 700px; max-height: 90vh; overflow-y: auto; }
+        .modal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 10; }
+        .modal-title { font-size: 1rem; font-weight: 600; }
+        .modal-sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+        .modal-close { background: none; border: none; font-size: 1.25rem; cursor: pointer; color: var(--muted); padding: 0.25rem; line-height: 1; }
+        .modal-close:hover { color: var(--text); }
+        .modal-body { padding: 1.5rem; }
+        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+        /* QR + INFO */
+        .quiz-info-strip { display: grid; grid-template-columns: 120px 1fr; gap: 1.5rem; align-items: start; margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+        .qr-box { background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 6px; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; }
+        .qr-box img { width: 100%; height: 100%; object-fit: contain; }
+        .info-rows { display: flex; flex-direction: column; gap: 0.75rem; }
+        .info-row label { display: block; font-family: var(--mono); font-size: 0.65rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+        .info-value { font-family: var(--mono); font-size: 0.88rem; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0.4rem 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+        .info-value span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .copy-btn { font-family: var(--sans); font-size: 0.7rem; font-weight: 500; background: none; border: 1px solid var(--border); border-radius: 3px; padding: 0.15rem 0.45rem; cursor: pointer; color: var(--muted); flex-shrink: 0; transition: border-color 0.15s, color 0.15s; }
+        .copy-btn:hover { border-color: var(--border-dark); color: var(--text); }
+        .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+        /* SECTION LABEL */
+        .section-label { font-family: var(--mono); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem; }
+
+        /* QUESTIONS */
+        .questions-list { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 1.5rem; max-height: 260px; overflow-y: auto; }
+        .question-row { background: var(--surface); padding: 0.7rem 1rem; display: flex; align-items: center; gap: 0.75rem; }
+        .question-row.q-active { background: #FFFBF0; }
+        .q-num { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); flex-shrink: 0; width: 2.25rem; }
+        .q-text { font-size: 0.84rem; flex: 1; line-height: 1.3; }
+        .q-type { font-family: var(--mono); font-size: 0.62rem; color: var(--muted); flex-shrink: 0; width: 5.5rem; text-align: right; }
+        .btn-open-q { font-family: var(--sans); font-size: 0.73rem; font-weight: 600; padding: 0.28rem 0.7rem; border-radius: 3px; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s; background: var(--text); color: #fff; border: none; }
+        .btn-open-q:hover { opacity: 0.8; }
+        .btn-close-q { font-family: var(--sans); font-size: 0.73rem; font-weight: 500; padding: 0.28rem 0.7rem; border-radius: 3px; cursor: pointer; flex-shrink: 0; background: none; color: var(--muted); border: 1px solid var(--border); transition: border-color 0.15s, color 0.15s; }
+        .btn-close-q:hover { border-color: var(--border-dark); color: var(--text); }
+
+        /* LEADERBOARD */
+        .lb-box { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 1.5rem; max-height: 260px; overflow-y: auto; }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+        .lb-table th { font-family: var(--mono); font-size: 0.63rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--bg); }
+        .lb-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--bg); }
+        .lb-table tr:last-child td { border-bottom: none; }
+        .lb-table tr:hover td { background: var(--bg); }
+        .lb-rank { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+        .lb-name { font-weight: 500; }
+        .lb-correct { font-family: var(--mono); color: var(--green); font-weight: 500; }
+        .lb-num { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); }
+        .lb-empty { font-size: 0.84rem; color: var(--muted); padding: 1rem 0.75rem; }
+
+        /* MODAL BUTTONS */
+        .btn-export { font-family: var(--sans); font-size: 0.82rem; font-weight: 600; background: var(--accent); color: var(--text); border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: opacity 0.15s; }
+        .btn-export:hover { opacity: 0.85; }
+        .btn-secondary { font-family: var(--sans); font-size: 0.82rem; font-weight: 500; background: none; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+        .btn-secondary:hover { border-color: var(--border-dark); color: var(--text); }
+
+        /* CREATE MODAL */
+        .create-modal { max-width: 560px; }
+        .field { margin-bottom: 1.1rem; }
+        .field label { display: block; font-family: var(--mono); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem; }
+        .field input, .field textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 0.75rem; font-family: var(--sans); font-size: 0.9rem; color: var(--text); outline: none; transition: border-color 0.15s; }
+        .field textarea { font-family: var(--mono); font-size: 0.76rem; height: 130px; resize: vertical; }
+        .field input:focus, .field textarea:focus { border-color: var(--accent); background: var(--surface); }
+        .field-hint { font-size: 0.71rem; color: var(--muted); margin-top: 0.3rem; }
+    </style>
 </head>
-<body class="bg-gray-950 text-white min-h-screen p-6">
-    <div class="max-w-7xl mx-auto">
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-8">
+<body>
+<div class="topbar">
+    <div class="brand">Live<span>_Q</span></div>
+    <div class="topbar-right">
+        <span class="topbar-label">Admin Dashboard</span>
+        <a href="/admin/logout" class="btn-logout">Log out</a>
+    </div>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <div class="page-title">Quizzes</div>
+            <div class="page-sub">Click any quiz to open it, share the PIN, and control questions live.</div>
+        </div>
+        <button class="btn-primary" onclick="showCreate()">+ New Quiz</button>
+    </div>
+    <div id="quizGrid"></div>
+</div>
+
+<!-- Create Modal -->
+<div class="modal-overlay" id="createModal">
+    <div class="modal create-modal">
+        <div class="modal-header">
             <div>
-                <h1 class="text-3xl font-bold">Quiz Admin</h1>
-                <p class="text-gray-400 text-sm mt-1">Manage quizzes and monitor live participants</p>
+                <div class="modal-title">Create quiz</div>
+                <div class="modal-sub">Give it a title and paste your questions as a JSON array.</div>
             </div>
-            <a href="/admin/logout" class="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg">Logout</a>
+            <button class="modal-close" onclick="hideCreate()">×</button>
         </div>
-
-        <!-- Quizzes Grid -->
-        <div id="quizzes" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Will be populated by JS -->
+        <div class="modal-body">
+            <div class="field">
+                <label>Title</label>
+                <input id="quizTitle" type="text" placeholder="e.g. Week 5 — Neural Networks">
+            </div>
+            <div class="field">
+                <label>Questions JSON</label>
+                <textarea id="questionsJSON" placeholder='[{"id":0,"type":"mcq","q":"Question?","options":["A","B"],"correct_option":0}]'></textarea>
+                <div class="field-hint">Supported types: mcq · true_false · fill_up · multi_correct</div>
+            </div>
         </div>
-
-        <!-- Create Quiz Button -->
-        <button onclick="showCreateQuizModal()" class="mt-8 px-6 py-3 bg-green-700 hover:bg-green-600 rounded-lg font-bold">
-            ➕ Create New Quiz
-        </button>
-    </div>
-
-    <!-- Create Quiz Modal -->
-    <div id="createQuizModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div class="bg-gray-800 rounded-xl border border-gray-700 max-w-2xl w-full p-8">
-            <h2 class="text-2xl font-bold mb-6">Create New Quiz</h2>
-            
-            <div class="space-y-4 mb-6">
-                <div>
-                    <label class="block text-sm font-semibold mb-2">Quiz Title</label>
-                    <input id="quizTitle" type="text" placeholder="e.g. Python Basics 101" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white">
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-semibold mb-2">Questions (JSON)</label>
-                    <textarea id="questionsJSON" placeholder='[{"id":0,"type":"mcq","q":"Question?","options":["A","B"],"correct_option":0}]' class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white h-32 font-mono text-xs"></textarea>
-                    <p class="text-xs text-gray-400 mt-2">Paste JSON array. Types: mcq, true_false, fill_up, multi_correct</p>
-                </div>
-            </div>
-
-            <div class="flex gap-2">
-                <button onclick="createQuiz()" class="flex-1 px-4 py-2 bg-green-700 hover:bg-green-600 rounded">Create</button>
-                <button onclick="closeCreateQuizModal()" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">Cancel</button>
-            </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="hideCreate()">Cancel</button>
+            <button class="btn-primary" onclick="createQuiz()">Create</button>
         </div>
     </div>
+</div>
 
-    <!-- Quiz Detail Modal -->
-    <div id="quizModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div class="bg-gray-800 rounded-xl border border-gray-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8">
-            <div class="flex justify-between items-start mb-6">
-                <div>
-                    <h2 id="modalTitle" class="text-2xl font-bold">Quiz Name</h2>
-                    <p id="modalPin" class="text-gray-400 text-sm mt-1">PIN: ______</p>
-                </div>
-                <button onclick="closeQuizModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+<!-- Quiz Detail Modal -->
+<div class="modal-overlay" id="quizModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <div class="modal-title" id="modalTitle">—</div>
+                <div class="modal-sub" id="modalSub">—</div>
             </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <!-- QR Code -->
-                <div class="bg-gray-700 p-4 rounded-lg flex items-center justify-center">
-                    <img id="modalQR" src="" alt="QR Code" class="w-40 h-40">
-                </div>
-
-                <!-- Quiz Info -->
-                <div class="lg:col-span-2 space-y-4">
-                    <div>
-                        <label class="block text-xs text-gray-400 uppercase mb-1">Quiz PIN</label>
-                        <input id="pinInput" type="text" readonly class="w-full bg-gray-600 border border-gray-500 rounded p-2 font-mono">
+            <button class="modal-close" onclick="hideQuiz()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="quiz-info-strip">
+                <div class="qr-box"><img id="modalQR" src="" alt="QR Code"></div>
+                <div class="info-rows">
+                    <div class="info-row">
+                        <label>Quiz PIN</label>
+                        <div class="info-value"><span id="pinVal">—</span><button class="copy-btn" onclick="copyVal('pinVal',this)">Copy</button></div>
                     </div>
-                    <div>
-                        <label class="block text-xs text-gray-400 uppercase mb-1">Join Link</label>
-                        <input id="linkInput" type="text" readonly class="w-full bg-gray-600 border border-gray-500 rounded p-2 text-xs">
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="copyPin()" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded">Copy PIN</button>
-                        <button onclick="copyLink()" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded">Copy Link</button>
+                    <div class="info-row">
+                        <label>Join link</label>
+                        <div class="info-value"><span id="linkVal">—</span><button class="copy-btn" onclick="copyVal('linkVal',this)">Copy</button></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Questions -->
-            <div class="mb-6">
-                <h3 class="text-lg font-bold mb-4">Questions</h3>
-                <div id="questionsList" class="space-y-2 max-h-64 overflow-y-auto"></div>
-            </div>
+            <div class="section-label">Questions</div>
+            <div class="questions-list" id="questionsList"></div>
 
-            <!-- Leaderboard -->
-            <div class="mb-6">
-                <h3 class="text-lg font-bold mb-4">Live Leaderboard</h3>
-                <div id="leaderboardArea" class="bg-gray-700 p-4 rounded max-h-48 overflow-y-auto text-sm">
-                    <p class="text-gray-500">No participants yet</p>
-                </div>
-            </div>
-
-            <!-- Export -->
-            <div class="flex gap-2">
-                <button onclick="exportStats()" class="flex-1 px-4 py-2 bg-green-700 hover:bg-green-600 rounded">Export Stats</button>
-                <button onclick="closeQuizModal()" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">Close</button>
+            <div class="section-label">Live leaderboard</div>
+            <div class="lb-box">
+                <table class="lb-table">
+                    <thead><tr><th>#</th><th>Name</th><th>Correct</th><th>Speed pts</th><th>Strikes</th></tr></thead>
+                    <tbody id="lbBody"><tr><td colspan="5" class="lb-empty">No participants yet.</td></tr></tbody>
+                </table>
             </div>
         </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="hideQuiz()">Close</button>
+            <button class="btn-export" onclick="exportStats()">Export XLSX</button>
+        </div>
     </div>
+</div>
 
-    <script>
-        const socket = io();
-        let activeQuiz = null;
-        let allQuizzes = {{ quizzes | tojson }};
+<script>
+const socket = io();
+let activeQuiz = null;
+let allQuizzes = {{ quizzes | tojson }};
 
-        socket.on('connect', () => {
-            renderQuizzes();
+socket.on('connect', () => {
+    // Refresh quiz states from server on connect
+    fetch('/admin/quizzes').then(r => r.json()).then(data => {
+        data.forEach(fresh => {
+            const q = allQuizzes.find(x => x.id === fresh.id);
+            if (q) { q.state = fresh.state; q.active_question_id = fresh.active_question_id; }
         });
+        renderGrid();
+    }).catch(() => renderGrid());
+});
+socket.on('leaderboard_update', (data) => { if (activeQuiz) renderLB(data.leaderboard); });
 
-        socket.on('leaderboard_update', (data) => {
-            if (activeQuiz) {
-                renderLeaderboard(data.leaderboard);
-            }
-        });
+function renderGrid() {
+    const el = document.getElementById('quizGrid');
+    if (!allQuizzes.length) {
+        el.innerHTML = '<div class="empty-state">No quizzes yet. Click "+ New Quiz" to get started.</div>';
+        return;
+    }
+    el.innerHTML = '<div class="quiz-grid">' + allQuizzes.map(q => `
+        <div class="quiz-card" onclick="openQuiz('${q.id}','${q.title}','${q.pin}')">
+            <div class="quiz-card-top">
+                <div class="quiz-title">${q.title}</div>
+                <span class="state-badge ${q.state==='running'?'state-running':'state-idle'}">${q.state}</span>
+            </div>
+            <div class="quiz-pin">${q.pin}</div>
+            <div class="quiz-meta">${q.questions_data?.length||0} questions</div>
+        </div>
+    `).join('') + '</div>';
+}
 
-        function renderQuizzes() {
-            if (!Array.isArray(allQuizzes)) return;
-            const container = document.getElementById('quizzes');
-            const items = allQuizzes.map(q => `
-                <div class="bg-gray-800 rounded-xl border border-gray-700 p-6 cursor-pointer hover:border-blue-500 transition" onclick="openQuiz('${q.id}', '${q.title}', '${q.pin}')">
-                    <h3 class="text-lg font-bold mb-2">${q.title}</h3>
-                    <p class="text-gray-400 text-sm mb-4">PIN: <span class="font-mono font-bold text-blue-400">${q.pin}</span></p>
-                    <div class="flex justify-between text-xs text-gray-500">
-                        <span>${q.questions_data?.length || 0} questions</span>
-                        <span class="px-2 py-1 ${q.state === 'running' ? 'bg-green-900 text-green-300' : 'bg-gray-700'} rounded">${q.state}</span>
-                    </div>
-                </div>
-            `).join('');
-            container.innerHTML = items || '<p class="text-gray-500">No quizzes. Click "Create New Quiz" to start.</p>';
-        }
+function showCreate() { document.getElementById('createModal').classList.add('open'); }
+function hideCreate() { document.getElementById('createModal').classList.remove('open'); }
 
-        function showCreateQuizModal() {
-            document.getElementById('createQuizModal').classList.remove('hidden');
-        }
+function createQuiz() {
+    const title = document.getElementById('quizTitle').value.trim();
+    const qstr = document.getElementById('questionsJSON').value.trim();
+    if (!title) { alert('Enter a title.'); return; }
+    let questions;
+    try { questions = JSON.parse(qstr); if (!Array.isArray(questions)) throw 0; }
+    catch { alert('Invalid JSON — must be an array.'); return; }
+    const form = new FormData();
+    form.append('title', title);
+    form.append('questions_json', qstr);
+    fetch('/admin/quiz/new', { method: 'POST', body: form })
+        .then(r => r.json())
+        .then(data => {
+            const q = { id: data.quiz_id, title, pin: data.pin, state: 'idle', questions_data: questions, active_question_id: null };
+            allQuizzes.unshift(q);
+            renderGrid();
+            hideCreate();
+            document.getElementById('quizTitle').value = '';
+            document.getElementById('questionsJSON').value = '';
+            openQuizFull(q, data.qr, data.join_url);
+        }).catch(e => alert('Error: ' + e));
+}
 
-        function closeCreateQuizModal() {
-            document.getElementById('createQuizModal').classList.add('hidden');
-        }
+function openQuiz(id) {
+    const q = allQuizzes.find(x => x.id === id);
+    const url = window.location.origin + `/?pin=${q.pin}`;
+    openQuizFull(q, null, url);
+}
 
-        function createQuiz() {
-            const title = document.getElementById('quizTitle').value.trim();
-            const questionsStr = document.getElementById('questionsJSON').value.trim();
-            if (!title) { alert('Enter quiz title'); return; }
-            if (!questionsStr) { alert('Paste questions JSON'); return; }
-            try {
-                const questions = JSON.parse(questionsStr);
-                if (!Array.isArray(questions)) throw new Error('Must be array');
-                const form = new FormData();
-                form.append('title', title);
-                form.append('questions_json', questionsStr);
-                fetch('/admin/quiz/new', { method: 'POST', body: form })
-                    .then(r => r.json())
-                    .then(data => {
-                        allQuizzes.push({
-                            id: data.quiz_id,
-                            title: title,
-                            pin: data.pin,
-                            state: 'idle',
-                            questions_data: questions,
-                            active_question_id: null
-                        });
-                        renderQuizzes();
-                        closeCreateQuizModal();
-                        openQuiz(data.quiz_id, title, data.pin);
-                        document.getElementById('quizTitle').value = '';
-                        document.getElementById('questionsJSON').value = '';
-                    })
-                    .catch(e => alert('Error: ' + e));
-            } catch (e) {
-                alert('Invalid JSON: ' + e.message);
-            }
-        }
+function openQuizFull(q, qrB64, joinUrl) {
+    activeQuiz = q.id;
+    document.getElementById('modalTitle').textContent = q.title;
+    document.getElementById('modalSub').textContent = `PIN: ${q.pin} · ${q.questions_data?.length||0} questions`;
+    document.getElementById('pinVal').textContent = q.pin;
+    document.getElementById('linkVal').textContent = joinUrl;
+    const qrEl = document.getElementById('modalQR');
+    qrEl.src = qrB64 ? 'data:image/png;base64,' + qrB64
+        : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
+    renderQuestions(q.questions_data, q.active_question_id, q.id);
+    socket.emit('join_quiz', { quiz_id: q.id });
+    socket.emit('get_leaderboard', { quiz_id: q.id });
+    document.getElementById('quizModal').classList.add('open');
+}
 
-        function openQuiz(quizId, title, pin) {
-            activeQuiz = quizId;
-            document.getElementById('modalTitle').innerText = title;
-            document.getElementById('modalPin').innerText = `PIN: ${pin}`;
-            document.getElementById('pinInput').value = pin;
-            const quiz = allQuizzes.find(q => q.id === quizId);
-            if (quiz && quiz.questions_data) {
-                renderQuestions(quiz.questions_data, quiz.active_question_id, quizId);
-            }
-            const joinUrl = window.location.origin + `/?pin=${pin}`;
-            document.getElementById('linkInput').value = joinUrl;
-            socket.emit('join_quiz', { quiz_id: quizId });
-            socket.emit('get_leaderboard', { quiz_id: quizId });
-            document.getElementById('quizModal').classList.remove('hidden');
-        }
+function hideQuiz() { document.getElementById('quizModal').classList.remove('open'); activeQuiz = null; }
 
-        function closeQuizModal() {
-            document.getElementById('quizModal').classList.add('hidden');
-            activeQuiz = null;
-        }
+function renderQuestions(questions, activeQId, quizId) {
+    document.getElementById('questionsList').innerHTML = (questions||[]).map((q,i) => `
+        <div class="question-row ${activeQId===i?'q-active':''}">
+            <span class="q-num">Q${i+1}</span>
+            <span class="q-text">${q.q?q.q.substring(0,80)+(q.q.length>80?'…':''):'(empty)'}</span>
+            <span class="q-type">${q.type||'mcq'}</span>
+            ${activeQId===i
+                ? `<button class="btn-close-q" onclick="closeQ('${quizId}')">Close</button>`
+                : `<button class="btn-open-q" onclick="openQ('${quizId}',${i})">Open</button>`}
+        </div>
+    `).join('') || '<div class="question-row"><span class="q-text" style="color:var(--muted)">No questions.</span></div>';
+}
 
-        function renderQuestions(questions, activeQId, quizId) {
-            const html = (questions || []).map((q, idx) => `
-                <div class="flex justify-between items-center p-3 bg-gray-700 rounded border ${activeQId === idx ? 'border-green-500 bg-green-900/20' : 'border-gray-600'}">
-                    <div class="flex-1">
-                        <div class="font-semibold">Q${idx + 1}: ${q.q ? q.q.substring(0, 60) : '(no text)'}${q.q && q.q.length > 60 ? '...' : ''}</div>
-                        <div class="text-xs text-gray-400 mt-1">${q.type || 'mcq'}</div>
-                    </div>
-                    <div class="flex gap-2">
-                        ${activeQId === idx ? `<button onclick="closeQuestion('${quizId}', ${idx})" class="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-sm">Close</button>` : `<button onclick="openQuestion('${quizId}', ${idx})" class="px-3 py-1 bg-green-700 hover:bg-green-600 rounded text-sm">Open</button>`}
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('questionsList').innerHTML = html || '<p class="text-gray-500">No questions</p>';
-        }
+function openQ(quizId, qId) {
+    fetch(`/admin/quiz/${quizId}/question/open/${qId}`, { method: 'POST' }).then(() => {
+        const q = allQuizzes.find(x => x.id === quizId);
+        if (q) { q.active_question_id = qId; q.state = 'running'; renderQuestions(q.questions_data, qId, quizId); renderGrid(); }
+    });
+}
 
-        function openQuestion(quizId, qId) {
-            fetch(`/admin/quiz/${quizId}/question/open/${qId}`, { method: 'POST' }).then(() => {
-                const quiz = allQuizzes.find(q => q.id === quizId);
-                if (quiz) {
-                    quiz.active_question_id = qId;
-                    renderQuestions(quiz.questions_data, qId, quizId);
-                }
-            });
-        }
+function closeQ(quizId) {
+    fetch(`/admin/quiz/${quizId}/question/close`, { method: 'POST' }).then(() => {
+        const q = allQuizzes.find(x => x.id === quizId);
+        if (q) { q.active_question_id = null; q.state = 'idle'; renderQuestions(q.questions_data, null, quizId); renderGrid(); }
+    });
+}
 
-        function closeQuestion(quizId) {
-            fetch(`/admin/quiz/${quizId}/question/close`, { method: 'POST' }).then(() => {
-                const quiz = allQuizzes.find(q => q.id === quizId);
-                if (quiz) {
-                    quiz.active_question_id = null;
-                    renderQuestions(quiz.questions_data, null, quizId);
-                }
-            });
-        }
+function renderLB(board) {
+    document.getElementById('lbBody').innerHTML = (!board||!board.length)
+        ? '<tr><td colspan="5" class="lb-empty">No participants yet.</td></tr>'
+        : board.slice(0,20).map((p,i) => `
+            <tr>
+                <td class="lb-rank">${i+1}</td>
+                <td class="lb-name">${p.username}</td>
+                <td class="lb-correct">${p.correct}</td>
+                <td class="lb-num">${p.speed_points}</td>
+                <td class="lb-num">${p.strikes}</td>
+            </tr>`).join('');
+}
 
-        function renderLeaderboard(board) {
-            if (!board || board.length === 0) {
-                document.getElementById('leaderboardArea').innerHTML = '<p class="text-gray-500">No participants yet</p>';
-                return;
-            }
-            const html = board.slice(0, 10).map((p, idx) => `
-                <div class="flex justify-between py-2 border-b border-gray-600 last:border-0">
-                    <span>#${idx + 1} <strong>${p.username}</strong></span>
-                    <span class="text-blue-400 font-bold">${p.score} pts</span>
-                </div>
-            `).join('');
-            document.getElementById('leaderboardArea').innerHTML = html;
-        }
+function exportStats() { if (activeQuiz) window.open(`/admin/quiz/${activeQuiz}/export`, '_blank'); }
 
-        function exportStats() {
-            if (!activeQuiz) return;
-            fetch(`/admin/quiz/${activeQuiz}/stats`)
-                .then(r => r.json())
-                .then(data => {
-                    const csv = 'Username,Score,Total,Strikes,Attended\n' + data.map(s => `${s.username},${s.score},${s.total},${s.strikes},${s.attended ? 'Yes' : 'No'}`).join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `quiz_stats_${new Date().toISOString().slice(0, 10)}.csv`;
-                    a.click();
-                });
-        }
-
-        function copyPin() {
-            document.getElementById('pinInput').select();
-            document.execCommand('copy');
-        }
-
-        function copyLink() {
-            document.getElementById('linkInput').select();
-            document.execCommand('copy');
-        }
-    </script>
+function copyVal(id, btn) {
+    navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
+        btn.textContent = 'Copied'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+    });
+}
+</script>
 </body>
-</html><!-- Cache buster: 110038728 -->
+</html>

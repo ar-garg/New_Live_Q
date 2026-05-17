@@ -3,48 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz Platform - Join</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Live_Q — Join</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #F5F4F0; --surface: #FFFFFF; --border: #D9D7D0;
+            --text: #1A1A18; --muted: #6B6A63; --accent: #E8A020;
+            --error-bg: #FFF0F0; --error-border: #F5C0C0; --error-text: #8B2020;
+            --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+        }
+        body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+        .container { width: 100%; max-width: 400px; }
+        .brand { margin-bottom: 2.5rem; }
+        .brand-name { font-family: var(--mono); font-size: 1.1rem; font-weight: 500; letter-spacing: 0.05em; }
+        .brand-name span { color: var(--accent); }
+        .brand-tagline { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2rem; }
+        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.375rem; }
+        .card-sub { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.75rem; line-height: 1.5; }
+        .error-box { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); font-size: 0.82rem; padding: 0.625rem 0.875rem; border-radius: 4px; margin-bottom: 1.25rem; }
+        .field { margin-bottom: 1.125rem; }
+        label { display: block; font-family: var(--mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.375rem; }
+        input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.625rem 0.75rem; font-family: var(--sans); font-size: 0.95rem; color: var(--text); outline: none; transition: border-color 0.15s; }
+        input:focus { border-color: var(--accent); background: var(--surface); }
+        input[name="quiz_pin"] { font-family: var(--mono); font-size: 1.1rem; letter-spacing: 0.15em; }
+        .field-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; font-family: var(--mono); }
+        .btn { width: 100%; margin-top: 0.5rem; padding: 0.75rem; background: var(--text); color: #fff; font-family: var(--sans); font-size: 0.9rem; font-weight: 600; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.15s; }
+        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .footer { margin-top: 1.25rem; font-size: 0.75rem; color: var(--muted); text-align: center; line-height: 1.5; }
+    </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center">
-    <div class="max-w-md w-full bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700">
-        <h1 class="text-3xl font-bold mb-2">Quiz Platform</h1>
-        <p class="text-gray-400 mb-6 text-sm">Enter quiz PIN and username to join.</p>
-
-        {% if error %}
-        <div class="mb-4 p-3 bg-red-900 border border-red-600 rounded-lg text-red-200 text-sm">
-            {{ error }}
-        </div>
-        {% endif %}
-
-        <form action="/join" method="POST" class="space-y-4" id="joinForm">
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Quiz PIN</label>
-                <input type="text" name="quiz_pin" required placeholder="e.g. ABC123" maxlength="6" value="{{ prefill_pin }}"
-                    class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 uppercase">
+<body>
+<div class="container">
+    <div class="brand">
+        <div class="brand-name">Live<span>_Q</span></div>
+        <div class="brand-tagline">Real-time quiz platform</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Join a quiz</div>
+        <div class="card-sub">Get the PIN from your teacher, enter your name or student ID below.</div>
+        {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
+        <form action="/join" method="POST" id="joinForm">
+            <div class="field">
+                <label for="quiz_pin">Quiz PIN</label>
+                <input type="text" id="quiz_pin" name="quiz_pin" required placeholder="ABC123" maxlength="6" value="{{ prefill_pin }}" autocomplete="off" spellcheck="false">
+                <div class="field-hint">6 characters · case-insensitive</div>
             </div>
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Username</label>
-                <input type="text" name="username" required placeholder="Your name or ID"
-                    class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500">
+            <div class="field">
+                <label for="username">Your name / student ID</label>
+                <input type="text" id="username" name="username" required placeholder="e.g. B24186" autocomplete="off">
             </div>
-            <button id="joinBtn" type="submit"
-                class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold transition">
-                Join Quiz
-            </button>
+            <button class="btn" id="joinBtn" type="submit">Join Quiz →</button>
         </form>
     </div>
-    <script>
-        document.getElementById('joinForm').addEventListener('submit', function () {
-            const btn = document.getElementById('joinBtn');
-            btn.disabled = true;
-            btn.innerText = 'Joining...';
-            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-            btn.classList.add('bg-gray-600', 'cursor-not-allowed');
-        });
-        document.querySelector('input[name="quiz_pin"]').addEventListener('input', function(e) {
-            this.value = this.value.toUpperCase();
-        });
-    </script>
+    <div class="footer">Already joined? Use the same name to resume your session.</div>
+</div>
+<script>
+    document.getElementById('joinForm').addEventListener('submit', function () {
+        const btn = document.getElementById('joinBtn');
+        btn.disabled = true;
+        btn.textContent = 'Joining…';
+    });
+    document.getElementById('quiz_pin').addEventListener('input', function () {
+        this.value = this.value.toUpperCase();
+    });
+</script>
 </body>
 </html>

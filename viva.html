@@ -2,248 +2,658 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz - {{ username }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>Live_Q — {{ username }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #F5F4F0;
+            --surface: #FFFFFF;
+            --border: #D9D7D0;
+            --border-dark: #B8B5AC;
+            --text: #1A1A18;
+            --muted: #6B6A63;
+            --accent: #E8A020;
+            --accent-dark: #C8880E;
+            --green: #2D7A4F;
+            --green-bg: #EDF7F2;
+            --red: #8B2020;
+            --red-bg: #FFF0F0;
+            --yellow: #92610A;
+            --yellow-bg: #FFFBF0;
+            --mono: 'DM Mono', monospace;
+            --sans: 'DM Sans', sans-serif;
+        }
+        html, body { height: 100%; }
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        input, textarea { -webkit-user-select: text; user-select: text; }
+
+        /* TOPBAR */
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 1rem;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .brand { font-family: var(--mono); font-size: 0.9rem; font-weight: 500; letter-spacing: 0.05em; }
+        .brand span { color: var(--accent); }
+        .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
+        .q-user { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+        .q-status {
+            font-family: var(--mono); font-size: 0.65rem; font-weight: 500;
+            letter-spacing: 0.05em; padding: 0.2rem 0.5rem; border-radius: 3px;
+            background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+        }
+        .q-status.active { background: var(--green-bg); color: var(--green); border-color: var(--green-bg); }
+        .q-strikes { font-family: var(--mono); font-size: 0.68rem; color: var(--yellow); }
+
+        /* MAIN LAYOUT - mobile first, desktop splits */
+        .layout {
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 48px);
+        }
+
+        @media (min-width: 768px) {
+            .layout { flex-direction: row; height: calc(100vh - 48px); }
+        }
+
+        /* QUESTION PANEL */
+        .question-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            min-height: 0;
+        }
+
+        @media (min-width: 768px) {
+            .question-panel {
+                border-bottom: none;
+                border-right: 1px solid var(--border);
+                overflow-y: auto;
+            }
+        }
+
+        .q-body {
+            flex: 1;
+            padding: 1.25rem 1rem;
+            overflow-y: auto;
+        }
+
+        @media (min-width: 768px) {
+            .q-body { padding: 2rem 2.5rem; }
+        }
+
+        .q-waiting {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            padding: 2rem 0;
+        }
+        .q-waiting-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+        .q-number {
+            font-family: var(--mono);
+            font-size: 0.68rem;
+            color: var(--muted);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 0.6rem;
+        }
+        .q-text {
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.45;
+            margin-bottom: 1.25rem;
+            color: var(--text);
+        }
+
+        @media (min-width: 768px) {
+            .q-text { font-size: 1.2rem; margin-bottom: 1.75rem; }
+        }
+
+        /* OPTIONS */
+        .options { display: flex; flex-direction: column; gap: 0.5rem; }
+
+        .option-label {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.7rem 0.875rem;
+            background: var(--bg);
+            border: 1.5px solid var(--border-dark);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: border-color 0.12s, background 0.12s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .option-label:hover, .option-label:active { border-color: var(--accent); background: #FEF9EF; }
+        .option-label.selected { border-color: var(--accent); background: #FEF9EF; }
+        .option-label.reveal-correct { border-color: var(--green); background: var(--green-bg); }
+        .option-label.reveal-wrong { border-color: var(--red); background: var(--red-bg); opacity: 0.7; }
+        .option-label input { display: none; }
+
+        .option-marker {
+            width: 1.1rem; height: 1.1rem;
+            border-radius: 50%;
+            border: 1.5px solid var(--border-dark);
+            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.55rem;
+            transition: border-color 0.12s, background 0.12s;
+        }
+        .option-label.selected .option-marker { border-color: var(--accent); background: var(--accent); }
+        .option-label.selected .option-marker::after { content: ''; width: 0.35rem; height: 0.35rem; border-radius: 50%; background: #fff; }
+        .checkbox-marker { border-radius: 3px; }
+        .option-label.selected .checkbox-marker::after { content: '✓'; font-size: 0.65rem; color: #fff; line-height: 1; }
+        .option-label.reveal-correct .option-marker { border-color: var(--green); background: var(--green); }
+        .option-label.reveal-correct .option-marker::after { content: '✓'; font-size: 0.65rem; color: #fff; line-height: 1; }
+
+        .option-text { font-size: 0.88rem; line-height: 1.3; }
+
+        .multi-hint { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.6rem; font-family: var(--mono); }
+
+        .fill-input {
+            width: 100%;
+            background: var(--bg);
+            border: 1.5px solid var(--border-dark);
+            border-radius: 4px;
+            padding: 0.7rem 0.875rem;
+            font-family: var(--sans);
+            font-size: 0.95rem;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .fill-input:focus { border-color: var(--accent); background: var(--surface); }
+
+        .submit-btn {
+            margin-top: 1rem;
+            padding: 0.7rem 1.5rem;
+            background: var(--text);
+            color: #fff;
+            font-family: var(--sans);
+            font-size: 0.88rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.15s;
+            width: 100%;
+        }
+        @media (min-width: 768px) {
+            .submit-btn { width: auto; }
+        }
+        .submit-btn:hover { opacity: 0.82; }
+        .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* REVEAL BOX */
+        .reveal-box {
+            margin-top: 1rem;
+            padding: 0.875rem 1rem;
+            border-radius: 4px;
+            font-size: 0.84rem;
+            line-height: 1.5;
+        }
+        .reveal-box.correct { background: var(--green-bg); border: 1px solid #9ECDB8; color: var(--green); }
+        .reveal-box.incorrect { background: var(--red-bg); border: 1px solid #F5C0C0; color: var(--red); }
+        .reveal-label { font-family: var(--mono); font-size: 0.65rem; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .reveal-answer { font-weight: 600; font-size: 0.9rem; }
+
+        /* TIMER */
+        .q-timer {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .timer-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+        .timer-label { font-family: var(--mono); font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .timer-value { font-family: var(--mono); font-size: 0.95rem; font-weight: 500; color: var(--text); }
+        .timer-value.urgent { color: var(--red); }
+        .timer-track { height: 3px; background: var(--border); border-radius: 2px; }
+        .timer-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.1s linear; }
+
+        /* RESULT */
+        .result-box { text-align: center; padding: 2rem 1rem; }
+        .result-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .result-text { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.25rem; }
+        .result-sub { font-size: 0.82rem; color: var(--muted); margin-top: 0.4rem; }
+        .result-speed { font-family: var(--mono); font-size: 0.8rem; color: var(--accent-dark); margin-top: 0.4rem; }
+        .result-correct-answer { margin-top: 1rem; padding: 0.75rem 1rem; background: var(--green-bg); border: 1px solid #9ECDB8; border-radius: 4px; font-size: 0.84rem; color: var(--green); text-align: left; }
+        .result-correct-answer .reveal-label { color: var(--green); opacity: 0.8; }
+        .result-correct-answer .reveal-answer { color: var(--green); }
+
+        /* LEADERBOARD PANEL */
+        .lb-panel {
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+        }
+
+        @media (min-width: 768px) {
+            .lb-panel {
+                width: 260px;
+                flex-shrink: 0;
+                border-top: none;
+                border-left: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+        }
+
+        .lb-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        @media (min-width: 768px) {
+            .lb-header { cursor: default; }
+        }
+
+        .lb-title { font-size: 0.85rem; font-weight: 600; }
+        .lb-sub { font-size: 0.68rem; color: var(--muted); font-family: var(--mono); }
+        .lb-toggle { font-size: 0.75rem; color: var(--muted); }
+
+        @media (min-width: 768px) {
+            .lb-toggle { display: none; }
+        }
+
+        .lb-list {
+            display: none;
+            overflow-y: auto;
+        }
+
+        .lb-list.open { display: block; max-height: 280px; }
+
+        @media (min-width: 768px) {
+            .lb-list { display: block; flex: 1; max-height: none; }
+        }
+
+        .lb-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        .lb-row:last-child { border-bottom: none; }
+        .lb-row:hover { background: var(--surface); }
+        .lb-row.me { background: #FEF9EF; }
+        .lb-rank-num { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); width: 1.25rem; flex-shrink: 0; }
+        .lb-name { font-size: 0.82rem; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lb-name.me-name { color: var(--accent-dark); }
+        .lb-scores { text-align: right; flex-shrink: 0; }
+        .lb-correct { font-family: var(--mono); font-size: 0.75rem; color: var(--green); font-weight: 500; }
+        .lb-speed { font-family: var(--mono); font-size: 0.62rem; color: var(--muted); }
+        .lb-empty { padding: 1rem; font-size: 0.82rem; color: var(--muted); }
+    </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen select-none" oncontextmenu="return false;">
-    <div class="flex h-screen gap-4 p-4">
-        <!-- Left: Question -->
-        <div class="flex-1 max-w-2xl">
-            <div class="bg-gray-800 rounded-xl border border-gray-700 p-8 h-full flex flex-col">
-                <div class="mb-6">
-                    <h1 class="text-gray-400 text-sm font-mono mb-2">{{ username }}</h1>
-                    <div id="status" class="inline-block px-3 py-1 bg-gray-700 rounded text-xs">
-                        Waiting for question...
-                    </div>
-                </div>
+<body oncontextmenu="return false;">
 
-                <div id="questionContainer" class="flex-1 flex flex-col justify-center">
-                    <p class="text-gray-400 text-center">🔄 Quiz will begin when teacher opens first question.</p>
-                </div>
+<div class="topbar">
+    <div class="brand">Live<span>_Q</span></div>
+    <div class="topbar-right">
+        <span id="strikeDisplay" class="q-strikes"></span>
+        <span class="q-user">{{ username }}</span>
+        <span id="status" class="q-status">Waiting…</span>
+    </div>
+</div>
 
-                <div id="timerBar" class="mt-6 hidden">
-                    <div class="flex justify-between mb-2">
-                        <span class="text-xs text-gray-400">Time Remaining</span>
-                        <span id="timerText" class="font-mono font-bold text-lg text-red-500">00:00</span>
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-2">
-                        <div id="timerProgress" class="bg-blue-500 h-2 rounded-full transition-all" style="width: 100%"></div>
-                    </div>
-                </div>
+<div class="layout">
+    <div class="question-panel">
+        <div class="q-body" id="questionContainer">
+            <div class="q-waiting">
+                <div class="q-waiting-icon">⏳</div>
+                <div>Quiz will begin when the teacher opens the first question.</div>
             </div>
         </div>
-
-        <!-- Right: Leaderboard -->
-        <div class="w-80">
-            <div class="bg-gray-800 rounded-xl border border-gray-700 p-6 h-full flex flex-col">
-                <h2 class="text-lg font-bold mb-4">🏆 Leaderboard</h2>
-                <div id="leaderboard" class="flex-1 overflow-y-auto space-y-2 text-sm">
-                    <p class="text-gray-500 text-center">Loading...</p>
-                </div>
+        <div class="q-timer" id="timerBar" style="display:none;">
+            <div class="timer-row">
+                <span class="timer-label">Time remaining</span>
+                <span id="timerText" class="timer-value">—</span>
             </div>
+            <div class="timer-track"><div id="timerProgress" class="timer-fill" style="width:100%"></div></div>
         </div>
     </div>
 
-    <script>
-        const quizId = "{{ quiz_id }}";
-        const username = "{{ username }}";
-        let currentQuestionId = null;
-        let questionStartTime = null;
-        let timerInterval = null;
-        let currentQuestion = null;
+    <div class="lb-panel">
+        <div class="lb-header" onclick="toggleLb()">
+            <div>
+                <div class="lb-title">Leaderboard</div>
+                <div class="lb-sub">Most correct → fastest</div>
+            </div>
+            <span class="lb-toggle" id="lbToggleIcon">▼</span>
+        </div>
+        <div class="lb-list" id="leaderboard">
+            <div class="lb-empty">No participants yet.</div>
+        </div>
+    </div>
+</div>
 
-        const socket = io();
+<script>
+const quizId = "{{ quiz_id }}";
+const username = "{{ username }}";
+let currentQuestionId = null;
+let questionStartTime = null;
+let timerInterval = null;
+let currentQuestion = null;
+let submitted = false;
+let totalStrikes = 0;
+let answeredQuestions = new Set();
+let lastAnswerData = null;
+let isActiveTab = false;
+let lbOpen = false;
 
-        socket.on('connect', () => {
-            socket.emit('join_quiz', { quiz_id: quizId });
-            socket.emit('get_leaderboard', { quiz_id: quizId });
-        });
+// Tab lock
+const TAB_KEY = 'lq_tab_' + quizId + '_' + username;
+const MY_TAB_ID = Math.random().toString(36).slice(2);
 
-        socket.on('question_opened', (data) => {
-            currentQuestionId = data.question_id;
-            currentQuestion = data.question;
-            questionStartTime = Date.now();
-            renderQuestion(data.question);
-            startTimer(data.question.time_limit);
-            updateStatus(`Question ${data.question_id + 1} - Answer Now`);
-        });
+function claimTab() { localStorage.setItem(TAB_KEY, MY_TAB_ID); isActiveTab = true; }
 
-        socket.on('question_closed', () => {
-            currentQuestionId = null;
-            currentQuestion = null;
-            clearInterval(timerInterval);
-            document.getElementById('timerBar').classList.add('hidden');
-            document.getElementById('questionContainer').innerHTML = `
-                <p class="text-gray-400 text-center">Question closed. Waiting for next...</p>
-            `;
-            updateStatus('Waiting for next question...');
-        });
+function showDupTab(msg) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#F5F4F0;font-family:sans-serif;text-align:center;padding:2rem"><div><p style="font-size:2rem;margin-bottom:1rem">&#9888;</p><h2 style="font-size:1.1rem;margin-bottom:0.5rem">' + msg + '</h2><p style="font-size:0.85rem;color:#6B6A63;margin-top:1rem"><a href="" onclick="localStorage.setItem(\'' + TAB_KEY + '\',\'' + MY_TAB_ID + '\');location.reload();return false;" style="color:#E8A020">Use this tab instead</a></p></div></div>';
+}
 
-        socket.on('leaderboard_update', (data) => {
-            renderLeaderboard(data.leaderboard);
-        });
+function checkTabLock() {
+    const cur = localStorage.getItem(TAB_KEY);
+    if (cur && cur !== MY_TAB_ID) { isActiveTab = false; showDupTab('Quiz open in another tab.'); return false; }
+    claimTab(); return true;
+}
 
-        function renderQuestion(q) {
-            const container = document.getElementById('questionContainer');
-            const qType = q.type || 'mcq';
-            let html = `<div>
-                <h3 class="text-2xl font-semibold mb-6">${q.q}</h3>
-                <form id="answerForm" class="space-y-3">`;
+window.addEventListener('storage', function(e) {
+    if (e.key === TAB_KEY && e.newValue !== MY_TAB_ID) { isActiveTab = false; showDupTab('Session taken over by another tab.'); }
+});
+window.addEventListener('beforeunload', function() { if (isActiveTab) localStorage.removeItem(TAB_KEY); });
 
-            if (qType === 'mcq') {
-                q.options.forEach((opt, idx) => {
-                    html += `
-                    <label class="flex items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer transition border border-transparent hover:border-blue-500">
-                        <input type="radio" name="answer" value="${idx}" class="hidden peer" required>
-                        <span class="peer-checked:text-blue-400 peer-checked:font-bold">${opt}</span>
-                    </label>`;
-                });
-            } else if (qType === 'true_false') {
-                ['true', 'false'].forEach(val => {
-                    html += `
-                    <label class="flex items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer transition border border-transparent hover:border-blue-500">
-                        <input type="radio" name="answer" value="${val}" class="hidden peer" required>
-                        <span class="peer-checked:text-blue-400 peer-checked:font-bold">${val.toUpperCase()}</span>
-                    </label>`;
-                });
-            } else if (qType === 'fill_up') {
-                html += `<input type="text" name="answer" placeholder="Type your answer..." class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500" required>`;
-            } else if (qType === 'multi_correct') {
-                q.options.forEach((opt, idx) => {
-                    html += `
-                    <label class="flex items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer transition border border-transparent hover:border-blue-500">
-                        <input type="checkbox" name="answer" value="${idx}" class="hidden peer" onchange="updateMultiAnswer()">
-                        <span class="peer-checked:text-blue-400 peer-checked:font-bold">${opt}</span>
-                    </label>`;
-                });
-            }
+if (!checkTabLock()) { throw new Error('dup'); }
 
-            html += `<button type="submit" class="w-full mt-4 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-bold">Submit</button>
-                </form></div>`;
+function toggleLb() {
+    lbOpen = !lbOpen;
+    document.getElementById('leaderboard').className = 'lb-list' + (lbOpen ? ' open' : '');
+    document.getElementById('lbToggleIcon').textContent = lbOpen ? '▲' : '▼';
+}
 
-            container.innerHTML = html;
+const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
 
-            document.getElementById('answerForm').addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitAnswer();
-            });
+let answersReady = false;
+let pendingQuestion = null;
+
+fetch('/my_answers').then(function(r) { return r.json(); }).then(function(ids) {
+    ids.forEach(function(id) { answeredQuestions.add(Number(id)); answeredQuestions.add(String(id)); });
+    answersReady = true;
+    if (pendingQuestion) { handleQuestionOpened(pendingQuestion); pendingQuestion = null; }
+}).catch(function() { answersReady = true; });
+
+socket.on('connect', function() {
+    socket.emit('join_quiz', { quiz_id: quizId });
+    socket.emit('get_leaderboard', { quiz_id: quizId });
+});
+
+socket.on('question_opened', function(data) {
+    if (!answersReady) { pendingQuestion = data; return; }
+    handleQuestionOpened(data);
+});
+
+socket.on('question_closed', function(data) {
+    clearInterval(timerInterval);
+    document.getElementById('timerBar').style.display = 'none';
+    var correctAnswer = (data && data.correct_answer) ? data.correct_answer : null;
+    if (submitted && lastAnswerData !== null) {
+        // Student answered — show correct/incorrect + correct answer
+        showAnswerReveal(lastAnswerData, correctAnswer);
+    } else if (submitted && lastAnswerData === null) {
+        // Strike case — just show correct answer
+        var html = '<div class="result-box"><div class="result-icon">⚠</div><div class="result-text" style="color:var(--yellow)">Strike recorded</div>';
+        if (correctAnswer) {
+            html += '<div class="result-correct-answer" style="margin-top:1rem"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
         }
-
-        function startTimer(timeLimit) {
-            const maxTime = (timeLimit || 60) * 1000;
-            document.getElementById('timerBar').classList.remove('hidden');
-
-            timerInterval = setInterval(() => {
-                const elapsed = Date.now() - questionStartTime;
-                const remaining = Math.max(0, maxTime - elapsed);
-                const secs = Math.ceil(remaining / 1000);
-
-                document.getElementById('timerText').innerText = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
-                document.getElementById('timerProgress').style.width = ((remaining / maxTime) * 100) + '%';
-
-                if (remaining <= 0) {
-                    clearInterval(timerInterval);
-                    submitAnswer();
-                }
-            }, 100);
+        html += '<div class="result-sub" style="margin-top:0.75rem">Waiting for the teacher to continue…</div></div>';
+        document.getElementById('questionContainer').innerHTML = html;
+    } else {
+        // Did not answer
+        var html2 = '<div class="q-waiting"><div class="q-waiting-icon">⏳</div><div>Question closed.</div>';
+        if (correctAnswer) {
+            html2 += '<div style="margin-top:1rem;padding:0.75rem 1rem;background:var(--green-bg);border:1px solid #9ECDB8;border-radius:4px;font-size:0.84rem;color:var(--green);text-align:left"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
         }
+        html2 += '</div>';
+        document.getElementById('questionContainer').innerHTML = html2;
+    }
+    currentQuestionId = null;
+    currentQuestion = null;
+    lastAnswerData = null;
+    updateStatus('Waiting…', false);
+});
 
-        function submitAnswer() {
-            if (!currentQuestion) return;
+socket.on('leaderboard_update', function(data) { renderLeaderboard(data.leaderboard); });
 
-            const form = document.getElementById('answerForm');
-            if (!form) return;
+function handleQuestionOpened(data) {
+    if (answeredQuestions.has(data.question_id) || answeredQuestions.has(Number(data.question_id))) {
+        updateStatus('Q' + (data.question_id + 1) + ' — Already answered', false);
+        document.getElementById('questionContainer').innerHTML = '<div class="q-waiting"><div class="q-waiting-icon">✓</div><div>You already answered this question. Wait for the next one.</div></div>';
+        return;
+    }
+    currentQuestionId = data.question_id;
+    currentQuestion = data.question;
+    questionStartTime = Date.now();
+    submitted = false;
+    lastAnswerData = null;
+    renderQuestion(data.question);
+    startTimer(data.question.time_limit);
+    updateStatus('Q' + (data.question_id + 1) + ' — Answer now', true);
+}
 
-            let answer = '';
-            const qType = currentQuestion.type || 'mcq';
+function showAnswerReveal(submitData, correctAnswer) {
+    var isCorrect = submitData.is_correct;
+    var color = isCorrect ? 'var(--green)' : 'var(--red)';
+    var icon = isCorrect ? '✓' : '✗';
+    var label = isCorrect ? 'Correct' : 'Incorrect';
+    var speedLine = (submitData.speed_points > 0) ? '<div class="result-speed">+' + submitData.speed_points + ' speed points</div>' : '';
+    var answerLine = '';
+    if (correctAnswer && !isCorrect) {
+        answerLine = '<div class="result-correct-answer"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
+    }
+    document.getElementById('questionContainer').innerHTML =
+        '<div class="result-box">' +
+        '<div class="result-icon">' + icon + '</div>' +
+        '<div class="result-text" style="color:' + color + '">' + label + '</div>' +
+        speedLine + answerLine +
+        '<div class="result-sub" style="margin-top:0.75rem">Waiting for the teacher to continue…</div>' +
+        '</div>';
+}
 
-            if (qType === 'multi_correct') {
-                const checked = Array.from(document.querySelectorAll('input[name="answer"]:checked')).map(e => e.value);
-                answer = checked.join(',');
-            } else {
-                const field = form.querySelector('input[name="answer"]:checked') || form.querySelector('input[name="answer"]');
-                answer = field ? field.value : '';
-            }
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-            if (!answer) {
-                alert('Please select an answer');
-                return;
-            }
+function renderQuestion(q) {
+    var container = document.getElementById('questionContainer');
+    var qType = q.type || 'mcq';
+    var html = '<div style="display:flex;flex-direction:column;">' +
+        '<div class="q-number">Question ' + (currentQuestionId + 1) + '</div>' +
+        '<div class="q-text">' + escHtml(q.q) + '</div>' +
+        '<div class="options" id="answerArea">';
 
-            clearInterval(timerInterval);
-            const timeTaken = (Date.now() - questionStartTime) / 1000;
-
-            fetch('/submit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    question_id: currentQuestionId,
-                    answer: answer,
-                    time_taken: timeTaken
-                })
-            }).then(r => r.json()).then(data => {
-                if (data.ok) {
-                    document.getElementById('questionContainer').innerHTML = '<p class="text-green-400 text-center text-lg">✓ Answer submitted</p>';
-                }
-            });
-        }
-
-        function renderLeaderboard(board) {
-            const container = document.getElementById('leaderboard');
-            if (!board || board.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center">No participants yet</p>';
-                return;
-            }
-
-            container.innerHTML = board.slice(0, 15).map((p, idx) => `
-                <div class="flex justify-between items-center p-3 bg-gray-700 rounded border border-gray-600">
-                    <div class="flex-1">
-                        <span class="font-bold">#${idx + 1}</span>
-                        <span class="ml-2">${p.username}</span>
-                    </div>
-                    <div class="text-right">
-                        <div class="font-bold text-blue-400">${p.score} pts</div>
-                        <div class="text-xs text-gray-400">${p.strikes} ✕</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function updateStatus(msg) {
-            document.getElementById('status').innerText = msg;
-        }
-
-        function updateMultiAnswer() {
-            // Just for multi-select; can add visual feedback here
-        }
-
-        // Tab switch detection
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden && currentQuestionId !== null) {
-                fetch('/strike', { method: 'POST' })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.terminate) {
-                            alert('Terminated: Maximum strikes exceeded');
-                            window.location.href = '/';
-                        }
-                    });
-            }
+    if (qType === 'mcq') {
+        q.options.forEach(function(opt, idx) {
+            html += '<label class="option-label" onclick="selectRadio(this,event)">' +
+                '<input type="radio" name="answer" value="' + idx + '">' +
+                '<span class="option-marker"></span>' +
+                '<span class="option-text">' + escHtml(opt) + '</span></label>';
         });
-
-        // Disable common shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && (['c', 'v', 'u', 's', 'p', 'a'].includes(e.key.toLowerCase()))) {
-                e.preventDefault();
-            }
+    } else if (qType === 'true_false') {
+        ['True','False'].forEach(function(val) {
+            html += '<label class="option-label" onclick="selectRadio(this,event)">' +
+                '<input type="radio" name="answer" value="' + val.toLowerCase() + '">' +
+                '<span class="option-marker"></span>' +
+                '<span class="option-text">' + val + '</span></label>';
         });
+    } else if (qType === 'fill_up') {
+        html += '<input type="text" id="fillInput" class="fill-input" placeholder="Type your answer…" autocomplete="off">';
+    } else if (qType === 'multi_correct') {
+        html += '<div class="multi-hint">Select all that apply</div>';
+        q.options.forEach(function(opt, idx) {
+            html += '<label class="option-label" onclick="toggleCheck(this,event)">' +
+                '<input type="checkbox" name="answer" value="' + idx + '">' +
+                '<span class="option-marker checkbox-marker"></span>' +
+                '<span class="option-text">' + escHtml(opt) + '</span></label>';
+        });
+    }
+    html += '</div><button id="submitBtn" onclick="submitAnswer()" class="submit-btn">Submit Answer</button></div>';
+    container.innerHTML = html;
+}
 
-        // Resume support
-        {% if resuming %}
-        alert('Session resumed. You may continue from where you left off.');
-        {% endif %}
-    </script>
+function selectRadio(label, event) {
+    event.preventDefault();
+    document.querySelectorAll('.option-label').forEach(function(l) { l.classList.remove('selected'); });
+    label.classList.add('selected');
+    label.querySelector('input').checked = true;
+}
+
+function toggleCheck(label, event) {
+    event.preventDefault();
+    label.classList.toggle('selected');
+    label.querySelector('input').checked = label.classList.contains('selected');
+}
+
+function startTimer(timeLimit) {
+    var maxTime = (timeLimit || 60) * 1000;
+    document.getElementById('timerBar').style.display = 'block';
+    clearInterval(timerInterval);
+    timerInterval = setInterval(function() {
+        var elapsed = Date.now() - questionStartTime;
+        var remaining = Math.max(0, maxTime - elapsed);
+        var secs = Math.ceil(remaining / 1000);
+        var tv = document.getElementById('timerText');
+        tv.textContent = String(Math.floor(secs/60)).padStart(2,'0') + ':' + String(secs%60).padStart(2,'0');
+        tv.className = 'timer-value' + (secs <= 10 ? ' urgent' : '');
+        document.getElementById('timerProgress').style.width = ((remaining/maxTime)*100) + '%';
+        if (remaining <= 0) { clearInterval(timerInterval); submitAnswer(); }
+    }, 200);
+}
+
+function submitAnswer() {
+    if (!currentQuestion || submitted) return;
+    var qType = currentQuestion.type || 'mcq';
+    var answer = '';
+    if (qType === 'multi_correct') {
+        var checked = Array.from(document.querySelectorAll('input[name="answer"]:checked')).map(function(e) { return e.value; });
+        answer = checked.join(',');
+    } else if (qType === 'fill_up') {
+        var fi = document.getElementById('fillInput');
+        answer = fi ? fi.value : '';
+    } else {
+        var sel = document.querySelector('input[name="answer"]:checked');
+        answer = sel ? sel.value : '';
+    }
+    if (!answer) { alert('Please select or enter an answer'); return; }
+
+    submitted = true;
+    clearInterval(timerInterval);
+    var timeTaken = (Date.now() - questionStartTime) / 1000;
+    var qId = currentQuestionId;
+    var btn = document.getElementById('submitBtn');
+    if (btn) btn.disabled = true;
+
+    fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: qId, answer: answer, time_taken: timeTaken })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) {
+            answeredQuestions.add(qId);
+            answeredQuestions.add(Number(qId));
+            answeredQuestions.add(String(qId));
+            lastAnswerData = data;
+            document.getElementById('questionContainer').innerHTML =
+                '<div class="result-box">' +
+                '<div class="result-icon">&#10003;</div>' +
+                '<div class="result-text" style="color:var(--muted)">Answer submitted</div>' +
+                '<div class="result-sub" style="margin-top:0.75rem">Results will show when the teacher closes the question.</div>' +
+                '</div>';
+        }
+    }).catch(function() {});
+}
+
+function renderLeaderboard(board) {
+    var container = document.getElementById('leaderboard');
+    if (!board || board.length === 0) { container.innerHTML = '<div class="lb-empty">No participants yet.</div>'; return; }
+    container.innerHTML = board.slice(0,20).map(function(p, idx) {
+        var isMe = p.username.toLowerCase() === username.toLowerCase();
+        return '<div class="lb-row' + (isMe?' me':'') + '">' +
+            '<span class="lb-rank-num">' + (idx+1) + '</span>' +
+            '<span class="lb-name' + (isMe?' me-name':'') + '">' + escHtml(p.username) + '</span>' +
+            '<div class="lb-scores">' +
+            '<div class="lb-correct">' + p.correct + ' \u2713</div>' +
+            '<div class="lb-speed">' + p.speed_points + ' spd</div>' +
+            '</div></div>';
+    }).join('');
+}
+
+function updateStatus(msg, isActive) {
+    var el = document.getElementById('status');
+    el.className = 'q-status' + (isActive ? ' active' : '');
+    el.textContent = msg;
+}
+
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden && currentQuestionId !== null && !submitted) {
+        submitted = true;
+        clearInterval(timerInterval);
+        var qId = currentQuestionId;
+        answeredQuestions.add(qId);
+        answeredQuestions.add(Number(qId));
+        answeredQuestions.add(String(qId));
+        lastAnswerData = null;
+        document.getElementById('questionContainer').innerHTML =
+            '<div class="result-box">' +
+            '<div class="result-icon">\u26A0</div>' +
+            '<div class="result-text" style="color:var(--yellow)">Strike recorded</div>' +
+            '<div class="result-sub" style="margin-top:0.5rem">Tab switch detected. This question is marked incorrect.</div>' +
+            '<div class="result-sub" style="margin-top:0.25rem">You can continue with the next question.</div>' +
+            '</div>';
+        fetch('/strike', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question_id: qId })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            totalStrikes = data.strikes || (totalStrikes + 1);
+            document.getElementById('strikeDisplay').textContent = totalStrikes > 0 ? (totalStrikes + ' strike' + (totalStrikes !== 1 ? 's' : '')) : '';
+        }).catch(function() {});
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && ['c','v','u','s','p','a'].includes(e.key.toLowerCase())) e.preventDefault();
+});
+
+{% if resuming %}
+setTimeout(function() { alert('Session resumed. Continue from where you left off.'); }, 500);
+{% endif %}
+</script>
 </body>
 </html>
