@@ -636,5 +636,6 @@ def on_get_leaderboard(data):
     emit('leaderboard_update', {'leaderboard': _get_sorted_lb(quiz_id)})
 
 if __name__ == '__main__':
-    logger.info("Quiz Platform starting on 0.0.0.0:5001")
-    socketio.run(app, host='0.0.0.0', port=5001, debug=False, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', 5001))
+    logger.info(f"Quiz Platform starting on 0.0.0.0:{port}")
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
