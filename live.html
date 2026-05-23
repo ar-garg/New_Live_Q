@@ -566,5 +566,295 @@
         <div class="quiz-title-bar" id="quizTitleBar">—</div>
         <div class="status-pill idle" id="statusPill">Idle</div>
     </div>
-    <div class="topbar-right">        <a href="/ad
-(Content truncated due to size limit. Use line ranges to read remaining content)
+    <div class="topbar-right">
+        <a href="/admin" class="btn-sm">← Dashboard</a>
+    </div>
+</div>
+
+<div class="layout">
+    <!-- LEFT: Join info + Question controls -->
+    <div class="left-panel">
+        <div class="join-section">
+            <div class="section-label">Join this quiz</div>
+            <div class="join-inner">
+                <div class="qr-wrap"><img id="qrImg" src="" alt="QR"></div>
+                <div class="join-details">
+                    <div class="pin-label">Quiz PIN</div>
+                    <div class="pin-display" id="pinDisplay">——</div>
+                    <div class="join-url" id="joinUrlDisplay">—</div>
+                    <div class="copy-row">
+                        <button class="btn-copy" onclick="copyText('pinDisplay', this)">Copy PIN</button>
+                        <button class="btn-copy" onclick="copyText('joinUrlDisplay', this)">Copy Link</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="questions-section">
+            <div class="section-label">Questions</div>
+            <div class="q-controls" id="qControls">
+                <div style="color:var(--muted);font-size:0.8rem;">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Leaderboard -->
+    <div class="right-panel">
+        <div class="lb-header">
+            <div class="lb-title">Leaderboard</div>
+            <div class="lb-subtitle">Most correct → fastest</div>
+            <div class="lb-count" id="participantCount">0 participants</div>
+            <button class="btn-refresh" onclick="refreshLb()" title="Refresh leaderboard">↻</button>
+        </div>
+        <div class="lb-body" id="lbBody">
+            <div class="lb-empty">
+                <div class="lb-empty-icon">👥</div>
+                <div>No participants yet.</div>
+                <div style="font-size:0.78rem;margin-top:0.4rem">Share the PIN or QR code to get started.</div>
+            </div>
+        </div>
+        <div class="current-q-panel" id="currentQPanel" style="display:none;">
+            <div class="cq-header">
+                <span class="cq-label" id="cqLabel">—</span>
+                <span class="cq-type-badge" id="cqTypeBadge">—</span>
+            </div>
+            <div class="cq-text" id="cqText">—</div>
+            <div class="cq-options" id="cqOptions"></div>
+        </div>
+        <div class="bottom-bar">
+            <div><span class="pulse"></span>Live updates</div>
+            <div id="lbUpdatedAt">—</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const quizId = "{{ quiz_id }}";
+const quizData = {{ quiz | tojson }};
+const joinUrl = "{{ join_url }}";
+const qrB64 = "{{ qr_b64 }}";
+
+// Init
+document.getElementById('quizTitleBar').textContent = quizData.title;
+document.getElementById('pinDisplay').textContent = quizData.pin;
+document.getElementById('joinUrlDisplay').textContent = joinUrl;
+document.getElementById('qrImg').src = qrB64 ? 'data:image/png;base64,' + qrB64
+    : 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(joinUrl);
+
+const socket = io();
+let activeQId = quizData.active_question_id;
+let answerCounts = {};
+let lastQuestion = null;
+
+socket.on('connect', function() {
+    socket.emit('join_quiz', { quiz_id: quizId });
+    socket.emit('get_leaderboard', { quiz_id: quizId });
+});
+
+socket.on('question_opened', function(data) {
+    activeQId = data.question_id;
+    lastQuestion = data.question;
+    updateStatusPill(true);
+    renderQControls();
+    showCurrentQuestion(data.question, data.question_id);
+});
+
+socket.on('question_closed', function(data) {
+    var correctAnswer = data && data.correct_answer ? data.correct_answer : null;
+    if (activeQId !== null && lastQuestion) {
+        showAnswerReveal(lastQuestion, activeQId, correctAnswer);
+        answerCounts[activeQId] = (answerCounts[activeQId] || 0);
+    }
+    activeQId = null;
+    updateStatusPill(false);
+    renderQControls();
+});
+
+socket.on('leaderboard_update', function(data) {
+    renderLeaderboard(data.leaderboard);
+    document.getElementById('lbUpdatedAt').textContent = 'Updated ' + new Date().toLocaleTimeString();
+});
+
+function updateStatusPill(running) {
+    var pill = document.getElementById('statusPill');
+    pill.textContent = running ? ('Q' + (activeQId + 1) + ' Open') : 'Idle';
+    pill.className = 'status-pill' + (running ? '' : ' idle');
+}
+
+if (activeQId !== null) updateStatusPill(true);
+
+function renderQControls() {
+    var questions = quizData.questions_data || [];
+    var html = '';
+    questions.forEach(function(q, i) {
+        var isActive = activeQId === i;
+        html += '<div class="q-row ' + (isActive ? 'active' : '') + '">' +
+            '<span class="q-label">Q' + (i+1) + '</span>' +
+            '<span class="q-dot"></span>' +
+            '<span class="q-spacer"></span>' +
+            (answerCounts[i] ? '<span class="q-answered">' + answerCounts[i] + ' ans</span>' : '') +
+            (isActive
+                ? '<button class="btn-openq close-btn" onclick="closeQ()">Close</button>'
+                : '<button class="btn-openq open-btn" onclick="openQ(' + i + ')">Open</button>') +
+            '</div>';
+    });
+    document.getElementById('qControls').innerHTML = html || '<div style="color:var(--muted);font-size:0.8rem;">No questions.</div>';
+}
+
+renderQControls();
+
+function openQ(qId) {
+    fetch('/admin/quiz/' + quizId + '/question/open/' + qId, { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function() {
+            activeQId = qId;
+            updateStatusPill(true);
+            renderQControls();
+        });
+}
+
+function closeQ() {
+    var qIdToClose = activeQId;
+    var qToReveal = lastQuestion;
+    fetch('/admin/quiz/' + quizId + '/question/close', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            // Show answer reveal immediately when admin clicks close
+            if (qIdToClose !== null && qToReveal) {
+                var correctAnswer = data && data.correct_answer ? data.correct_answer : null;
+                showAnswerReveal(qToReveal, qIdToClose, correctAnswer);
+            }
+            if (qIdToClose !== null) {
+                answerCounts[qIdToClose] = (answerCounts[qIdToClose] || 0);
+            }
+            activeQId = null;
+            updateStatusPill(false);
+            renderQControls();
+        });
+}
+
+function renderLeaderboard(board) {
+    var body = document.getElementById('lbBody');
+    var count = document.getElementById('participantCount');
+
+    if (!board || board.length === 0) {
+        body.innerHTML = '<div class="lb-empty"><div class="lb-empty-icon">&#128101;</div><div>No participants yet.</div><div style="font-size:0.78rem;margin-top:0.4rem">Share the PIN or QR code to get started.</div></div>';
+        count.textContent = '0 participants';
+        return;
+    }
+
+    count.textContent = board.length + ' participant' + (board.length !== 1 ? 's' : '');
+
+    var medals = ['&#127947;', '&#129352;', '&#129353;'];
+
+    body.innerHTML = board.slice(0, 50).map(function(p, i) {
+        var rankClass = i < 3 ? 'rank-' + (i+1) : '';
+        var rankLabel = i < 3 ? medals[i] : (i + 1);
+        return '<div class="lb-row ' + rankClass + '">' +
+            '<div class="lb-rank">' + rankLabel + '</div>' +
+            '<div class="lb-name">' + escHtml(p.username) + '</div>' +
+            '<div class="lb-stats">' +
+            '<div class="lb-correct">' + p.correct + ' &#10003;</div>' +
+            '<div class="lb-speed">' + p.speed_points + ' spd</div>' +
+            '</div></div>';
+    }).join('');
+}
+
+function showCurrentQuestion(q, qId) {
+    var panel = document.getElementById('currentQPanel');
+    var label = document.getElementById('cqLabel');
+    var badge = document.getElementById('cqTypeBadge');
+    var text = document.getElementById('cqText');
+    var opts = document.getElementById('cqOptions');
+
+    var typeMap = {
+        'mcq': 'Single correct',
+        'true_false': 'True / False',
+        'fill_up': 'Fill in the blank',
+        'multi_correct': 'Multi correct — select all that apply'
+    };
+    var isMulti = q.type === 'multi_correct';
+
+    label.textContent = 'Q' + (qId + 1) + ' — Now open';
+    badge.textContent = typeMap[q.type] || q.type;
+    badge.className = 'cq-type-badge' + (isMulti ? ' multi' : '');
+    text.innerHTML = (q.q || '').split('\n').map(function(l){return escHtml(l);}).join('<br>');
+
+    var optHtml = '';
+    if (q.options) {
+        q.options.forEach(function(opt, i) {
+            optHtml += '<span class="cq-opt">' + String.fromCharCode(65+i) + '. ' + escHtml(opt) + '</span>';
+        });
+    } else if (q.type === 'true_false') {
+        optHtml = '<span class="cq-opt">True</span><span class="cq-opt">False</span>';
+    } else if (q.type === 'fill_up') {
+        optHtml = '<span class="cq-opt" style="font-style:italic;color:var(--muted)">Text answer</span>';
+    }
+    opts.innerHTML = optHtml;
+    panel.style.display = 'block';
+}
+
+function hideCurrentQuestion() {
+    document.getElementById('currentQPanel').style.display = 'none';
+}
+
+// Show if question already open on page load
+if (activeQId !== null && quizData.questions_data && quizData.questions_data[activeQId]) {
+    lastQuestion = quizData.questions_data[activeQId];
+    showCurrentQuestion(lastQuestion, activeQId);
+}
+
+function showAnswerReveal(q, qId, correctAnswer) {
+    var panel = document.getElementById('currentQPanel');
+    var label = document.getElementById('cqLabel');
+    var badge = document.getElementById('cqTypeBadge');
+    var textEl = document.getElementById('cqText');
+    var opts = document.getElementById('cqOptions');
+
+    var typeMap = {
+        'mcq': 'Single correct', 'true_false': 'True / False',
+        'fill_up': 'Fill in the blank', 'multi_correct': 'Multi correct'
+    };
+    label.textContent = 'Q' + (qId + 1) + ' — Closed';
+    label.style.color = 'var(--muted)';
+    badge.textContent = (typeMap[q.type] || q.type) + ' — Answer revealed';
+    badge.className = 'cq-type-badge';
+    textEl.innerHTML = (q.q || '').split('\n').map(function(l){return escHtml(l);}).join('<br>');
+
+    var optHtml = '';
+    if (q.options && correctAnswer) {
+        var correctList = correctAnswer.split(', ');
+        q.options.forEach(function(opt, i) {
+            var isCorrect = correctList.indexOf(opt) !== -1;
+            optHtml += '<span class="cq-opt' + (isCorrect ? ' correct-opt' : '') + '">' +
+                String.fromCharCode(65+i) + '. ' + escHtml(opt) + (isCorrect ? ' ✓' : '') + '</span>';
+        });
+    } else if (correctAnswer) {
+        optHtml = '<span class="cq-opt correct-opt">✓ ' + escHtml(correctAnswer) + '</span>';
+    }
+    opts.innerHTML = optHtml;
+    panel.style.display = 'block';
+}
+
+function refreshLb() {
+    socket.emit('get_leaderboard', { quiz_id: quizId });
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyText(elId, btn) {
+    var text = document.getElementById(elId).textContent;
+    navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function() {
+            btn.textContent = elId === 'pinDisplay' ? 'Copy PIN' : 'Copy Link';
+            btn.classList.remove('copied');
+        }, 1500);
+    });
+}
+</script>
+</body>
+</html>
