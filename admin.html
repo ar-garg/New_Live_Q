@@ -33,6 +33,8 @@
         .page-sub { font-size: 0.82rem; color: var(--muted); margin-top: 0.2rem; }
         .btn-primary { font-family: var(--sans); font-size: 0.85rem; font-weight: 600; background: var(--text); color: #fff; border: none; border-radius: 4px; padding: 0.55rem 1.1rem; cursor: pointer; transition: opacity 0.15s; }
         .btn-primary:hover { opacity: 0.82; }
+        .btn-del-all { font-family: var(--sans); font-size: 0.85rem; font-weight: 500; background: none; color: #8B2020; border: 1px solid #F5C0C0; border-radius: 4px; padding: 0.55rem 1.1rem; cursor: pointer; transition: background 0.15s; }
+        .btn-del-all:hover { background: #FFF0F0; }
 
         /* QUIZ GRID */
         .quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -45,6 +47,7 @@
         .state-idle { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
         .quiz-pin { font-family: var(--mono); font-size: 1.1rem; font-weight: 500; letter-spacing: 0.15em; color: var(--accent-dark); margin-bottom: 0.4rem; }
         .quiz-meta { font-size: 0.75rem; color: var(--muted); }
+        .btn-del-quiz { font-size: 0.7rem; color: #8B2020; background: none; border: 1px solid #F5C0C0; border-radius: 3px; padding: 0.15rem 0.45rem; cursor: pointer; }
         .empty-state { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
 
         /* MODALS */
@@ -205,212 +208,11 @@
             <div class="section-label">Live leaderboard</div>
             <div class="lb-box">
                 <table class="lb-table">
-                    <thead><tr><th>#</th><th>Name</th><th>Correct</th><th>Speed pts</th><th>Strikes</th></tr></thead>
-                    <tbody id="lbBody"><tr><td colspan="5" class="lb-empty">No participants yet.</td></tr></tbody>
+                    <thead><tr><th>#</th><th>Name</th><th>Correct</th><th>Speed pts</th></tr></thead>
+                    <tbody id="lbBody"><tr><td colspan="4" class="lb-empty">No participants yet.</td></tr></tbody>
                 </table>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn-secondary" onclick="hideQuiz()">Close</button>
-            <button class="btn-live" onclick="openLiveView()">Live View</button>
-            <button class="btn-export" onclick="exportStats()">Export XLSX</button>
-        </div>
-    </div>
-</div>
-
-<script>
-const socket = io();
-let activeQuiz = null;
-let allQuizzes = {{ quizzes | tojson }};
-
-socket.on('connect', () => {
-    // Refresh quiz states from server on connect
-    fetch('/admin/quizzes').then(r => r.json()).then(data => {
-        data.forEach(fresh => {
-            const q = allQuizzes.find(x => x.id === fresh.id);
-            if (q) { q.state = fresh.state; q.active_question_id = fresh.active_question_id; }
-        });
-        renderGrid();
-    }).catch(() => renderGrid());
-});
-socket.on('leaderboard_update', (data) => { if (activeQuiz) renderLB(data.leaderboard); });
-
-function renderGrid() {
-    const el = document.getElementById('quizGrid');
-    if (!allQuizzes.length) {
-        el.innerHTML = '<div class="empty-state">No quizzes yet. Click "+ New Quiz" to get started.</div>';
-        return;
-    }
-    el.innerHTML = '<div class="quiz-grid">' + allQuizzes.map(q => `
-        <div class="quiz-card" onclick="openQuiz('${q.id}','${q.title}','${q.pin}')">
-            <div class="quiz-card-top">
-                <div class="quiz-title">${q.title}</div>
-                <span class="state-badge ${q.state==='running'?'state-running':'state-idle'}">${q.state}</span>
-            </div>
-            <div class="quiz-pin">${q.pin}</div>
-            <div class="quiz-meta" style="display:flex;justify-content:space-between;align-items:center;">
-                <span>${q.questions_data?.length||0} questions</span>
-                <button class="btn-del-quiz" onclick="event.stopPropagation();deleteQuiz('${q.id}','${q.title}')" title="Delete quiz">Delete</button>
-            </div>
-        </div>
-    `).join('') + '</div>';
-}
-
-function showCreate() { document.getElementById('createModal').classList.add('open'); }
-function hideCreate() { document.getElementById('createModal').classList.remove('open'); }
-
-function createQuiz() {
-    const title = document.getElementById('quizTitle').value.trim();
-    const qstr = document.getElementById('questionsJSON').value.trim();
-    if (!title) { alert('Enter a title.'); return; }
-    let questions;
-    try { questions = JSON.parse(qstr); if (!Array.isArray(questions)) throw 0; }
-    catch { alert('Invalid JSON — must be an array.'); return; }
-    const form = new FormData();
-    form.append('title', title);
-    form.append('questions_json', qstr);
-    fetch('/admin/quiz/new', { method: 'POST', body: form })
-        .then(r => r.json())
-        .then(data => {
-            const q = { id: data.quiz_id, title, pin: data.pin, state: 'idle', questions_data: questions, active_question_id: null };
-            allQuizzes.unshift(q);
-            renderGrid();
-            hideCreate();
-            document.getElementById('quizTitle').value = '';
-            document.getElementById('questionsJSON').value = '';
-            openQuizFull(q, data.qr, data.join_url);
-        }).catch(e => alert('Error: ' + e));
-}
-
-function openQuiz(id) {
-    const q = allQuizzes.find(x => x.id === id);
-    const url = window.location.origin + `/?pin=${q.pin}`;
-    openQuizFull(q, null, url);
-}
-
-function openQuizFull(q, qrB64, joinUrl) {
-    activeQuiz = q.id;
-    document.getElementById('modalTitle').textContent = q.title;
-    document.getElementById('modalSub').textContent = `PIN: ${q.pin} · ${q.questions_data?.length||0} questions`;
-    document.getElementById('pinVal').textContent = q.pin;
-    document.getElementById('linkVal').textContent = joinUrl;
-    const qrEl = document.getElementById('modalQR');
-    qrEl.src = qrB64 ? 'data:image/png;base64,' + qrB64
-        : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
-    renderQuestions(q.questions_data, q.active_question_id, q.id);
-    socket.emit('join_quiz', { quiz_id: q.id });
-    socket.emit('get_leaderboard', { quiz_id: q.id });
-    document.getElementById('quizModal').classList.add('open');
-}
-
-function hideQuiz() {
-    document.getElementById('quizModal').classList.remove('open');
-    activeQuiz = null;
-    showQText = false;
-    var btn = document.getElementById('toggleQBtn');
-    if (btn) { btn.textContent = 'Show text'; btn.className = 'btn-toggle-q'; }
-}
-
-function renderQuestions(questions, activeQId, quizId) {
-    document.getElementById('questionsList').innerHTML = (questions||[]).map((q,i) => `
-        <div class="question-row ${activeQId===i?'q-active':''}">
-            <span class="q-num">Q${i+1}</span>
-            <span class="q-text" style="color:${showQText?'inherit':'var(--border-dark)'};">${showQText?(q.q?q.q.substring(0,80)+(q.q.length>80?'…':''):'(empty)'):'••••••••••••••••'}</span>
-            <span class="q-type">${q.type||'mcq'}</span>
-            ${activeQId===i
-                ? `<button class="btn-close-q" onclick="closeQ('${quizId}')">Close</button>`
-                : `<button class="btn-open-q" onclick="openQ('${quizId}',${i})">Open</button>`}
-        </div>
-    `).join('') || '<div class="question-row"><span class="q-text" style="color:var(--muted)">No questions.</span></div>';
-}
-
-function openQ(quizId, qId) {
-    fetch(`/admin/quiz/${quizId}/question/open/${qId}`, { method: 'POST' }).then(() => {
-        const q = allQuizzes.find(x => x.id === quizId);
-        if (q) { q.active_question_id = qId; q.state = 'running'; renderQuestions(q.questions_data, qId, quizId); renderGrid(); }
-    });
-}
-
-function closeQ(quizId) {
-    fetch(`/admin/quiz/${quizId}/question/close`, { method: 'POST' }).then(() => {
-        const q = allQuizzes.find(x => x.id === quizId);
-        if (q) { q.active_question_id = null; q.state = 'idle'; renderQuestions(q.questions_data, null, quizId); renderGrid(); }
-    });
-}
-
-function renderLB(board) {
-    document.getElementById('lbBody').innerHTML = (!board||!board.length)
-        ? '<tr><td colspan="5" class="lb-empty">No participants yet.</td></tr>'
-        : board.slice(0,20).map((p,i) => `
-            <tr>
-                <td class="lb-rank">${i+1}</td>
-                <td class="lb-name">${p.username}</td>
-                <td class="lb-correct">${p.correct}</td>
-                <td class="lb-num">${p.speed_points}</td>
-                <td class="lb-num">${p.strikes}</td>
-            </tr>`).join('');
-}
-
-function exportStats() { if (activeQuiz) window.open(`/admin/quiz/${activeQuiz}/export`, '_blank'); }
-
-function deleteQuiz(quizId, title) {
-    if (!confirm('Delete quiz "' + title + '"?\n\nThis will permanently remove the quiz and all student responses. This cannot be undone.')) return;
-    fetch('/admin/quiz/' + quizId + '/delete', { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function() {
-            allQuizzes = allQuizzes.filter(function(q) { return q.id !== quizId; });
-            if (activeQuiz === quizId) hideQuiz();
-            renderGrid();
-        });
-}
-
-function deleteAllQuizzes() {
-    if (!confirm('Delete ALL quizzes?\n\nThis removes every quiz and all student responses permanently. This cannot be undone.')) return;
-    fetch('/admin/quiz/delete_all', { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function() {
-            allQuizzes = [];
-            activeQuiz = null;
-            hideQuiz();
-            renderGrid();
-        });
-}
-
-function deleteUser(username) {
-    if (!activeQuiz) return;
-    if (!confirm('Delete all responses from "' + username + '"?\n\nThis removes their session and answers from this quiz. This cannot be undone.')) return;
-    fetch('/admin/quiz/' + activeQuiz + '/user/' + encodeURIComponent(username) + '/delete', { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function() {
-            socket.emit('get_leaderboard', { quiz_id: activeQuiz });
-        });
-}
-
-function openLiveView() {
-    if (!activeQuiz) return;
-    const q = allQuizzes.find(x => x.id === activeQuiz);
-    if (!q) return;
-    const url = window.location.origin + '/admin/live/' + activeQuiz;
-    window.open(url, '_blank', 'noopener');
-}
-
-let showQText = false;
-
-function toggleQText() {
-    showQText = !showQText;
-    var btn = document.getElementById('toggleQBtn');
-    btn.textContent = showQText ? 'Hide text' : 'Show text';
-    btn.className = 'btn-toggle-q' + (showQText ? ' revealed' : '');
-    var q = allQuizzes.find(function(x) { return x.id === activeQuiz; });
-    if (q) renderQuestions(q.questions_data, q.active_question_id, q.id);
-}
-
-function copyVal(id, btn) {
-    navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
-        btn.textContent = 'Copied'; btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
-    });
-}
-</script>
-</body>
-</html>
+            <button class="btn-secondary" onclick="hideQuiz()">Close</button>            <button cl
+(Content truncated due to size limit. Use line ranges to read remaining content)

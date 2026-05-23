@@ -61,7 +61,6 @@
             background: var(--bg); border: 1px solid var(--border); color: var(--muted);
         }
         .q-status.active { background: var(--green-bg); color: var(--green); border-color: var(--green-bg); }
-        .q-strikes { font-family: var(--mono); font-size: 0.68rem; color: var(--yellow); }
 
         /* MAIN LAYOUT - mobile first, desktop splits */
         .layout {
@@ -320,7 +319,6 @@
 <div class="topbar">
     <div class="brand">Live<span>_Q</span></div>
     <div class="topbar-right">
-        <span id="strikeDisplay" class="q-strikes"></span>
         <span class="q-user">{{ username }}</span>
         <span id="status" class="q-status">Waiting…</span>
     </div>
@@ -329,6 +327,16 @@
 <div class="layout">
     <div class="question-panel">
         <div class="q-body" id="questionContainer">
+            {% if result_view %}
+            <div class="result-box">
+                <div class="result-icon">🏆</div>
+                <div class="result-text">Quiz Complete!</div>
+                <div style="font-family:var(--mono);font-size:2rem;font-weight:700;color:var(--green);margin-top:1rem">{{ correct }} / {{ total }}</div>
+                <div class="result-sub">correct answers</div>
+                <div class="result-speed" style="font-size:1rem;margin-top:0.5rem">+{{ speed }} total speed points</div>
+                <div class="result-sub" style="margin-top:1.5rem">Check the leaderboard to see your final rank.</div>
+            </div>
+            {% else %}
             <div class="q-waiting">
                 <div class="q-waiting-icon">⏳</div>
                 <div style="font-size:1rem;font-weight:600;margin-bottom:1.25rem;">Waiting for teacher to open a question.</div>
@@ -344,350 +352,28 @@
                             <span style="font-family:var(--mono);font-weight:700;color:var(--muted);">0</span>
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <span style="color:var(--text);">Tab switch / strike</span>
-                            <span style="font-family:var(--mono);font-weight:700;color:var(--muted);">0</span>
-                        </div>
-                        <div style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;display:flex;justify-content:space-between;align-items:center;">
-                            <span style="color:var(--text);">Speed points (tie-breaker)</span>
-                            <span style="font-family:var(--mono);font-weight:700;color:var(--accent-dark);">0–1000</span>
+                            <span style="color:var(--text);">Speed bonus</span>
+                            <span style="font-family:var(--mono);font-weight:700;color:var(--accent-dark);">Up to +1000</span>
                         </div>
                     </div>
-                    <div style="font-size:0.72rem;color:var(--muted);margin-top:0.75rem;line-height:1.5;">Speed points only apply on correct answers. Leaderboard ranks by most correct first, then speed.</div>
                 </div>
             </div>
+            {% endif %}
         </div>
+
         <div class="q-timer" id="timerBar" style="display:none;">
             <div class="timer-row">
-                <span class="timer-label">Time remaining</span>
-                <span id="timerText" class="timer-value">—</span>
+                <span class="timer-label">Time Remaining</span>
+                <span class="timer-value" id="timerText">00:00</span>
             </div>
-            <div class="timer-track"><div id="timerProgress" class="timer-fill" style="width:100%"></div></div>
+            <div class="timer-track"><div class="timer-fill" id="timerProgress" style="width:100%"></div></div>
         </div>
     </div>
 
     <div class="lb-panel">
-        <div class="lb-header" onclick="toggleLb()">
+        <div class="lb-header" onclick="document.getElementById('lbList').classList.toggle('open')">
             <div>
                 <div class="lb-title">Leaderboard</div>
-                <div class="lb-sub">Most correct → fastest</div>
-            </div>
-            <span class="lb-toggle" id="lbToggleIcon">▼</span>
-        </div>
-        <div class="lb-list" id="leaderboard">
-            <div class="lb-empty">No participants yet.</div>
-        </div>
-    </div>
-</div>
-
-<script>
-const quizId = "{{ quiz_id }}";
-const username = "{{ username }}";
-let currentQuestionId = null;
-let questionStartTime = null;
-let timerInterval = null;
-let currentQuestion = null;
-let submitted = false;
-let totalStrikes = 0;
-let answeredQuestions = new Set();
-let lastAnswerData = null;
-let isActiveTab = false;
-let lbOpen = false;
-let myCorrect = 0;
-let myTotal = 0;
-
-// Tab lock
-const TAB_KEY = 'lq_tab_' + quizId + '_' + username;
-const MY_TAB_ID = Math.random().toString(36).slice(2);
-
-function claimTab() { localStorage.setItem(TAB_KEY, MY_TAB_ID); isActiveTab = true; }
-
-function showDupTab(msg) {
-    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#F5F4F0;font-family:sans-serif;text-align:center;padding:2rem"><div><p style="font-size:2rem;margin-bottom:1rem">&#9888;</p><h2 style="font-size:1.1rem;margin-bottom:0.5rem">' + msg + '</h2><p style="font-size:0.85rem;color:#6B6A63;margin-top:1rem"><a href="" onclick="localStorage.setItem(\'' + TAB_KEY + '\',\'' + MY_TAB_ID + '\');location.reload();return false;" style="color:#E8A020">Use this tab instead</a></p></div></div>';
-}
-
-function checkTabLock() {
-    const cur = localStorage.getItem(TAB_KEY);
-    if (cur && cur !== MY_TAB_ID) { isActiveTab = false; showDupTab('Quiz open in another tab.'); return false; }
-    claimTab(); return true;
-}
-
-window.addEventListener('storage', function(e) {
-    if (e.key === TAB_KEY && e.newValue !== MY_TAB_ID) { isActiveTab = false; showDupTab('Session taken over by another tab.'); }
-});
-window.addEventListener('beforeunload', function() { if (isActiveTab) localStorage.removeItem(TAB_KEY); });
-
-if (!checkTabLock()) { throw new Error('dup'); }
-
-function toggleLb() {
-    lbOpen = !lbOpen;
-    document.getElementById('leaderboard').className = 'lb-list' + (lbOpen ? ' open' : '');
-    document.getElementById('lbToggleIcon').textContent = lbOpen ? '▲' : '▼';
-}
-
-const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
-
-let answersReady = false;
-let pendingQuestion = null;
-
-fetch('/my_answers').then(function(r) { return r.json(); }).then(function(ids) {
-    ids.forEach(function(id) { answeredQuestions.add(Number(id)); answeredQuestions.add(String(id)); });
-    answersReady = true;
-    if (pendingQuestion) { handleQuestionOpened(pendingQuestion); pendingQuestion = null; }
-}).catch(function() { answersReady = true; });
-
-socket.on('connect', function() {
-    socket.emit('join_quiz', { quiz_id: quizId });
-    socket.emit('get_leaderboard', { quiz_id: quizId });
-});
-
-socket.on('question_opened', function(data) {
-    if (!answersReady) { pendingQuestion = data; return; }
-    handleQuestionOpened(data);
-});
-
-socket.on('question_closed', function(data) {
-    clearInterval(timerInterval);
-    document.getElementById('timerBar').style.display = 'none';
-    var correctAnswer = (data && data.correct_answer) ? data.correct_answer : null;
-    if (submitted && lastAnswerData !== null) {
-        // Student answered — show correct/incorrect + correct answer
-        showAnswerReveal(lastAnswerData, correctAnswer, myCorrect, myTotal);
-    } else if (submitted && lastAnswerData === null) {
-        // Strike case — just show correct answer
-        var html = '<div class="result-box"><div class="result-icon">⚠</div><div class="result-text" style="color:var(--yellow)">Strike recorded</div>';
-        if (correctAnswer) {
-            html += '<div class="result-correct-answer" style="margin-top:1rem"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
-        }
-        html += '<div class="result-sub" style="margin-top:0.75rem">Waiting for the teacher to continue…</div></div>';
-        document.getElementById('questionContainer').innerHTML = html;
-    } else {
-        // Did not answer
-        var html2 = '<div class="q-waiting"><div class="q-waiting-icon">⏳</div><div>Question closed.</div>';
-        if (correctAnswer) {
-            html2 += '<div style="margin-top:1rem;padding:0.75rem 1rem;background:var(--green-bg);border:1px solid #9ECDB8;border-radius:4px;font-size:0.84rem;color:var(--green);text-align:left"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
-        }
-        html2 += '</div>';
-        document.getElementById('questionContainer').innerHTML = html2;
-    }
-    currentQuestionId = null;
-    currentQuestion = null;
-    lastAnswerData = null;
-    updateStatus('Waiting…', false);
-});
-
-socket.on('leaderboard_update', function(data) { renderLeaderboard(data.leaderboard); });
-
-function handleQuestionOpened(data) {
-    if (answeredQuestions.has(data.question_id) || answeredQuestions.has(Number(data.question_id))) {
-        updateStatus('Q' + (data.question_id + 1) + ' — Already answered', false);
-        document.getElementById('questionContainer').innerHTML = '<div class="q-waiting"><div class="q-waiting-icon">✓</div><div>You already answered this question. Wait for the next one.</div></div>';
-        return;
-    }
-    currentQuestionId = data.question_id;
-    currentQuestion = data.question;
-    questionStartTime = Date.now();
-    submitted = false;
-    lastAnswerData = null;
-    myTotal++;
-    renderQuestion(data.question);
-    startTimer(data.question.time_limit);
-    updateStatus('Q' + (data.question_id + 1) + ' — Answer now', true);
-}
-
-function showAnswerReveal(submitData, correctAnswer, correct, total) {
-    var isCorrect = submitData.is_correct;
-    var color = isCorrect ? 'var(--green)' : 'var(--red)';
-    var icon = isCorrect ? '✓' : '✗';
-    var label = isCorrect ? 'Correct' : 'Incorrect';
-    var speedLine = (submitData.speed_points > 0) ? '<div class="result-speed">+' + submitData.speed_points + ' speed points</div>' : '';
-    var answerLine = '';
-    if (correctAnswer) {
-        answerLine = '<div class="result-correct-answer"><div class="reveal-label">Correct answer</div><div class="reveal-answer">' + escHtml(correctAnswer) + '</div></div>';
-    }
-    var scoreLine = (correct !== undefined && total !== undefined)
-        ? '<div style="font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--green);margin-top:0.75rem">' + correct + ' / ' + total + '</div><div class="result-sub">correct so far</div>'
-        : '';
-    document.getElementById('questionContainer').innerHTML =
-        '<div class="result-box">' +
-        '<div class="result-icon">' + icon + '</div>' +
-        '<div class="result-text" style="color:' + color + '">' + label + '</div>' +
-        speedLine + scoreLine + answerLine +
-        '<div class="result-sub" style="margin-top:0.75rem">Waiting for the teacher to continue…</div>' +
-        '</div>';
-}
-
-function escHtml(str) {
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function renderQuestion(q) {
-    var container = document.getElementById('questionContainer');
-    var qType = q.type || 'mcq';
-    var html = '<div style="display:flex;flex-direction:column;">' +
-        '<div class="q-number">Question ' + (currentQuestionId + 1) + '</div>' +
-        '<div class="q-type-badge' + (qType === 'multi_correct' ? ' multi' : '') + '">' +
-        (qType === 'mcq' ? 'Single correct' : qType === 'true_false' ? 'True / False' : qType === 'fill_up' ? 'Fill in the blank' : 'Multi correct — select all that apply') +
-        '</div>' +
-        '<div class="q-text">' + q.q.split('\n').map(function(line){return escHtml(line);}).join('<br>') + '</div>' +
-        '<div class="options" id="answerArea">';
-
-    if (qType === 'mcq') {
-        q.options.forEach(function(opt, idx) {
-            html += '<label class="option-label" onclick="selectRadio(this,event)">' +
-                '<input type="radio" name="answer" value="' + idx + '">' +
-                '<span class="option-marker"></span>' +
-                '<span class="option-text">' + escHtml(opt) + '</span></label>';
-        });
-    } else if (qType === 'true_false') {
-        ['True','False'].forEach(function(val) {
-            html += '<label class="option-label" onclick="selectRadio(this,event)">' +
-                '<input type="radio" name="answer" value="' + val.toLowerCase() + '">' +
-                '<span class="option-marker"></span>' +
-                '<span class="option-text">' + val + '</span></label>';
-        });
-    } else if (qType === 'fill_up') {
-        html += '<input type="text" id="fillInput" class="fill-input" placeholder="Type your answer…" autocomplete="off">';
-    } else if (qType === 'multi_correct') {
-        html += '<div class="multi-hint">Select all that apply</div>';
-        q.options.forEach(function(opt, idx) {
-            html += '<label class="option-label" onclick="toggleCheck(this,event)">' +
-                '<input type="checkbox" name="answer" value="' + idx + '">' +
-                '<span class="option-marker checkbox-marker"></span>' +
-                '<span class="option-text">' + escHtml(opt) + '</span></label>';
-        });
-    }
-    html += '</div><button id="submitBtn" onclick="submitAnswer()" class="submit-btn">Submit Answer</button></div>';
-    container.innerHTML = html;
-}
-
-function selectRadio(label, event) {
-    event.preventDefault();
-    document.querySelectorAll('.option-label').forEach(function(l) { l.classList.remove('selected'); });
-    label.classList.add('selected');
-    label.querySelector('input').checked = true;
-}
-
-function toggleCheck(label, event) {
-    event.preventDefault();
-    label.classList.toggle('selected');
-    label.querySelector('input').checked = label.classList.contains('selected');
-}
-
-function startTimer(timeLimit) {
-    var maxTime = (timeLimit || 60) * 1000;
-    document.getElementById('timerBar').style.display = 'block';
-    clearInterval(timerInterval);
-    timerInterval = setInterval(function() {
-        var elapsed = Date.now() - questionStartTime;
-        var remaining = Math.max(0, maxTime - elapsed);
-        var secs = Math.ceil(remaining / 1000);
-        var tv = document.getElementById('timerText');
-        tv.textContent = String(Math.floor(secs/60)).padStart(2,'0') + ':' + String(secs%60).padStart(2,'0');
-        tv.className = 'timer-value' + (secs <= 10 ? ' urgent' : '');
-        document.getElementById('timerProgress').style.width = ((remaining/maxTime)*100) + '%';
-        if (remaining <= 0) { clearInterval(timerInterval); submitAnswer(); }
-    }, 200);
-}
-
-function submitAnswer() {
-    if (!currentQuestion || submitted) return;
-    var qType = currentQuestion.type || 'mcq';
-    var answer = '';
-    if (qType === 'multi_correct') {
-        var checked = Array.from(document.querySelectorAll('input[name="answer"]:checked')).map(function(e) { return e.value; });
-        answer = checked.join(',');
-    } else if (qType === 'fill_up') {
-        var fi = document.getElementById('fillInput');
-        answer = fi ? fi.value : '';
-    } else {
-        var sel = document.querySelector('input[name="answer"]:checked');
-        answer = sel ? sel.value : '';
-    }
-    if (!answer) { alert('Please select or enter an answer'); return; }
-
-    submitted = true;
-    clearInterval(timerInterval);
-    var timeTaken = (Date.now() - questionStartTime) / 1000;
-    var qId = currentQuestionId;
-    var btn = document.getElementById('submitBtn');
-    if (btn) btn.disabled = true;
-
-    fetch('/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: qId, answer: answer, time_taken: timeTaken })
-    }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data.ok) {
-            answeredQuestions.add(qId);
-            answeredQuestions.add(Number(qId));
-            answeredQuestions.add(String(qId));
-            lastAnswerData = data;
-            if (data.is_correct) myCorrect++;
-            document.getElementById('questionContainer').innerHTML =
-                '<div class="result-box">' +
-                '<div class="result-icon">&#10003;</div>' +
-                '<div class="result-text" style="color:var(--muted)">Answer submitted</div>' +
-                '<div class="result-sub" style="margin-top:0.75rem">Results and score will show when the teacher closes the question.</div>' +
-                '</div>';
-        }
-    }).catch(function() {});
-}
-
-function renderLeaderboard(board) {
-    var container = document.getElementById('leaderboard');
-    if (!board || board.length === 0) { container.innerHTML = '<div class="lb-empty">No participants yet.</div>'; return; }
-    container.innerHTML = board.slice(0,20).map(function(p, idx) {
-        var isMe = p.username.toLowerCase() === username.toLowerCase();
-        return '<div class="lb-row' + (isMe?' me':'') + '">' +
-            '<span class="lb-rank-num">' + (idx+1) + '</span>' +
-            '<span class="lb-name' + (isMe?' me-name':'') + '">' + escHtml(p.username) + '</span>' +
-            '<div class="lb-scores">' +
-            '<div class="lb-correct">' + p.correct + ' \u2713</div>' +
-            '<div class="lb-speed">' + p.speed_points + ' spd</div>' +
-            '</div></div>';
-    }).join('');
-}
-
-function updateStatus(msg, isActive) {
-    var el = document.getElementById('status');
-    el.className = 'q-status' + (isActive ? ' active' : '');
-    el.textContent = msg;
-}
-
-document.addEventListener('visibilitychange', function() {
-    if (document.hidden && currentQuestionId !== null && !submitted) {
-        submitted = true;
-        clearInterval(timerInterval);
-        var qId = currentQuestionId;
-        answeredQuestions.add(qId);
-        answeredQuestions.add(Number(qId));
-        answeredQuestions.add(String(qId));
-        lastAnswerData = null;
-        document.getElementById('questionContainer').innerHTML =
-            '<div class="result-box">' +
-            '<div class="result-icon">\u26A0</div>' +
-            '<div class="result-text" style="color:var(--yellow)">Strike recorded</div>' +
-            '<div class="result-sub" style="margin-top:0.5rem">Tab switch detected. This question is marked incorrect.</div>' +
-            '<div class="result-sub" style="margin-top:0.25rem">You can continue with the next question.</div>' +
-            '</div>';
-        fetch('/strike', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question_id: qId })
-        }).then(function(r) { return r.json(); }).then(function(data) {
-            totalStrikes = data.strikes || (totalStrikes + 1);
-            document.getElementById('strikeDisplay').textContent = totalStrikes > 0 ? (totalStrikes + ' strike' + (totalStrikes !== 1 ? 's' : '')) : '';
-        }).catch(function() {});
-    }
-});
-
-document.addEventListener('keydown', function(e) {
-    if (e.ctrlKey && ['c','v','u','s','p','a'].includes(e.key.toLowerCase())) e.preventDefault();
-});
-
-{% if resuming %}
-setTimeout(function() { alert('Session resumed. Continue from where you left off.'); }, 500);
-{% endif %}
-</script>
-</body>
-</html>
+                <div class="lb-sub">Live Rankings</div>
+            </div>            <div class=
+(Content truncated due to size limit. Use line ranges to read remaining content)

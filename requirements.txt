@@ -4,6 +4,6 @@ Flask-SocketIO>=5.3.6
 SQLAlchemy>=2.0.30
 python-socketio>=5.11.0
 python-engineio>=4.9.0
-qrcode==7.4.2
+qrcode>=8.0
 Pillow>=10.4.0
 openpyxl>=3.1.2

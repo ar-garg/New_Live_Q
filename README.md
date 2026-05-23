@@ -61,7 +61,7 @@ Real-time quiz platform for classrooms. Teachers control questions live, student
 ]
 ```
 
-`time_limit`: `null` means teacher closes manually. A number (seconds) auto-closes the question.
+`time_limit`: `null` means teacher closes manually. A number (seconds) auto-closes the question on the student side.
 
 ---
 
@@ -70,17 +70,10 @@ Real-time quiz platform for classrooms. Teachers control questions live, student
 | Component | Rule |
 |---|---|
 | Correct answer | +1 to correct count |
-| Speed points | 0–1000 based on time taken, only if fully correct |
-| Multi-correct | +1 per correct option selected, -1 per wrong option, min 0 |
-| Strike | Question marked incorrect, student stays in quiz |
+| Speed bonus | 0–1000 based on time taken, only awarded on a fully correct answer |
+| Multi-correct | Partial credit: correct selections minus wrong selections, min 0 |
 
-**Leaderboard ranks by:** most correct answers first, then highest speed points.
-
----
-
-## Strike System
-
-A strike is logged when a student switches tabs or minimises the browser while a question is open. The question is immediately marked incorrect. The student is **not** removed from the quiz. Strikes are shown in the exported stats.
+**Leaderboard ranks by:** most correct answers first, then highest speed points as the tie-breaker.
 
 ---
 
@@ -90,7 +83,7 @@ A strike is logged when a student switches tabs or minimises the browser while a
 2. Create a quiz — paste the questions JSON and give it a title
 3. Share the PIN or QR code with students
 4. Open questions one at a time
-5. Close a question to reveal the correct answer to students
+5. Close a question to reveal the correct answer to all students
 6. Export stats as XLSX when done
 
 ---
@@ -99,9 +92,9 @@ A strike is logged when a student switches tabs or minimises the browser while a
 
 1. Go to the join URL or scan the QR code
 2. Enter the PIN and your name / student ID
-3. Answer each question when it opens
-4. Results and correct answer show after the teacher closes the question
-5. If you disconnect, rejoin with the same name to resume
+3. Answer each question when it opens — a speed bonus is awarded for fast correct answers
+4. The correct answer is revealed after the teacher closes the question
+5. If you disconnect, rejoin with the same name to resume your session
 
 ---
 
@@ -110,9 +103,9 @@ A strike is logged when a student switches tabs or minimises the browser while a
 Two sheets:
 
 **Sheet 1 — Student Details**
-`Username | Total Correct | Speed Points | Strikes | Q1 Result | Q1 Speed Pts | Q2 Result | ...`
+`Username | Total Correct | Speed Points | Q1 Result | Q1 Speed Pts | Q2 Result | ...`
 
-Result values: `Correct`, `Wrong`, `Strike`, `N/A`
+Result values: `Correct`, `Wrong`, `N/A`
 
 **Sheet 2 — Question Summary**
 `Q# | Question | Type | Correct | Wrong | Not Attempted | Correct %`
@@ -134,9 +127,9 @@ Server runs at `http://localhost:5001`
 
 | Variable | Default | Description |
 |---|---|---|
-| `SECRET_KEY` | `ur_key` | Flask session key |
-| `ADMIN_PASSWORD` | `ur_pass` | Admin login password |
-| `PORT` | `ur_port` | Port to run on |
+| `SECRET_KEY` | `cs671-viva-g27` | Flask session key |
+| `ADMIN_PASSWORD` | `samiscrazy` | Admin login password |
+| `PORT` | `5001` | Port to run on |
 | `DB_PATH` | `quiz_platform.db` | SQLite database path |
 
 ---
@@ -145,10 +138,10 @@ Server runs at `http://localhost:5001`
 
 | Component | Technology |
 |---|---|
-| Backend | Flask + Flask-SocketIO |
-| Database | SQLite + SQLAlchemy |
+| Backend | Flask + Flask-SocketIO (threading mode) |
+| Database | SQLite + SQLAlchemy (WAL mode) |
 | Frontend | HTML + CSS + JavaScript |
-| Realtime | WebSockets |
+| Realtime | WebSockets via Socket.IO |
 | QR Generation | qrcode + Pillow |
 | Export | openpyxl |
 

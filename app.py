@@ -64,7 +64,6 @@ class QuizSession(Base):
     username = Column(String(255), nullable=False)
     correct_count = Column(Integer, default=0)
     speed_points = Column(Integer, default=0)
-    strikes = Column(Integer, default=0)
     attended = Column(Boolean, default=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
@@ -80,23 +79,22 @@ class Answer(Base):
     partial_score = Column(Integer, default=0)
     speed_points = Column(Integer, default=0)
     time_taken = Column(Float, nullable=True)
-    strike_on_question = Column(Boolean, default=False)
     answered_at = Column(DateTime, default=datetime.utcnow)
 
 Base.metadata.create_all(engine)
 
 # ─── IN-MEMORY LEADERBOARD CACHE ───────────────────────────────────────────────
-# {quiz_id: {session_id: {username, correct, speed_points, strikes}}}
+# {quiz_id: {session_id: {username, correct, speed_points}}}
 _lb_cache = defaultdict(dict)
 _lb_lock = threading.Lock()
 _lb_pending = set()
 _lb_last_broadcast = {}
 _LB_THROTTLE = 0.25  # broadcast at most 4x/second per quiz
 
-def _lb_update(quiz_id, sess_id, username, correct, speed, strikes):
+def _lb_update(quiz_id, sess_id, username, correct, speed):
     with _lb_lock:
         _lb_cache[quiz_id][sess_id] = {'username': username, 'correct': correct,
-                                        'speed_points': speed, 'strikes': strikes}
+                                        'speed_points': speed}
         _lb_pending.add(quiz_id)
 
 def _get_sorted_lb(quiz_id):
@@ -130,7 +128,7 @@ def _prime_lb_cache(quiz_id):
     with _lb_lock:
         for s in sessions:
             _lb_cache[quiz_id][s.id] = {'username': s.username, 'correct': s.correct_count,
-                                          'speed_points': s.speed_points, 'strikes': s.strikes}
+                                          'speed_points': s.speed_points}
 
 # ─── ASYNC WRITE QUEUE ─────────────────────────────────────────────────────────
 _write_queue = queue.Queue()
@@ -250,7 +248,7 @@ def join():
     db.close()
 
     _prime_lb_cache(quiz_id)
-    _lb_update(quiz_id, sess_id, username, 0, 0, 0)
+    _lb_update(quiz_id, sess_id, username, 0, 0)
     session.update({'session_id': sess_id, 'quiz_id': quiz_id, 'username': username, 'resuming': False})
     return redirect(url_for('quiz_page'))
 
@@ -288,8 +286,16 @@ def submit():
     if 'session_id' not in session:
         return jsonify({'error': 'not logged in'}), 401
 
-    data = request.get_json()
-    q_id = int(data.get('question_id'))
+    # force=True handles Content-Type issues, silent=True prevents crashing on bad JSON
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+
+    try:
+        q_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
+        
     user_answer = data.get('answer', '')
     time_taken = float(data.get('time_taken', 0))
     sess_id = session['session_id']
@@ -317,10 +323,10 @@ def submit():
     spd = calc_speed_points(time_taken, q.get('time_limit')) if not any_wrong else 0
 
     with _lb_lock:
-        entry = _lb_cache[quiz_id].get(sess_id, {'username': username, 'correct': 0, 'speed_points': 0, 'strikes': 0})
+        entry = _lb_cache[quiz_id].get(sess_id, {'username': username, 'correct': 0, 'speed_points': 0})
     new_correct = entry['correct'] + (1 if is_correct else 0)
     new_speed = entry['speed_points'] + spd
-    _lb_update(quiz_id, sess_id, username, new_correct, new_speed, entry['strikes'])
+    _lb_update(quiz_id, sess_id, username, new_correct, new_speed)
     # Emit immediately so first correct answer shows up right away
     socketio.emit('leaderboard_update', {'leaderboard': _get_sorted_lb(quiz_id)}, room=quiz_id)
 
@@ -348,50 +354,6 @@ def submit():
     _write_queue.put(_write)
     return jsonify({'ok': True, 'is_correct': is_correct, 'speed_points': spd})
 
-@app.route('/strike', methods=['POST'])
-def log_strike():
-    if 'session_id' not in session:
-        return jsonify({'strikes': 0}), 401
-
-    data = request.get_json(silent=True) or {}
-    q_id = data.get('question_id')
-    sess_id = session['session_id']
-    quiz_id = session['quiz_id']
-    username = session['username']
-
-    with _lb_lock:
-        entry = _lb_cache[quiz_id].get(sess_id, {'username': username, 'correct': 0, 'speed_points': 0, 'strikes': 0})
-        new_strikes = entry['strikes'] + 1
-        _lb_cache[quiz_id][sess_id] = {**entry, 'strikes': new_strikes}
-        _lb_pending.add(quiz_id)
-    socketio.emit('leaderboard_update', {'leaderboard': _get_sorted_lb(quiz_id)}, room=quiz_id)
-
-    answer_id, now = str(uuid.uuid4()), datetime.utcnow()
-
-    def _write():
-        db2 = SessionLocal()
-        try:
-            qs = db2.query(QuizSession).filter(QuizSession.id == sess_id).first()
-            if qs:
-                qs.strikes += 1
-            if q_id is not None:
-                exists = db2.query(Answer).filter(
-                    Answer.session_id == sess_id, Answer.question_id == int(q_id)).first()
-                if not exists:
-                    db2.add(Answer(id=answer_id, quiz_id=quiz_id, session_id=sess_id,
-                                   question_id=int(q_id), user_answer='[strike]',
-                                   is_correct=False, partial_score=0, speed_points=0,
-                                   time_taken=None, strike_on_question=True, answered_at=now))
-            db2.commit()
-        except Exception as e:
-            db2.rollback()
-            logger.error(f"Strike write: {e}")
-        finally:
-            db2.close()
-
-    _write_queue.put(_write)
-    return jsonify({'strikes': new_strikes, 'terminate': False})
-
 @app.route('/result')
 def result():
     if 'session_id' not in session:
@@ -399,18 +361,20 @@ def result():
     db = SessionLocal()
     qs = db.query(QuizSession).filter(QuizSession.id == session['session_id']).first()
     quiz = db.query(Quiz).filter(Quiz.id == session['quiz_id']).first()
-    if qs and not qs.completed_at:
+    if not qs or not quiz:
+        db.close()
+        return redirect(url_for('index'))
+    
+    # Finalize session if not already done
+    if not qs.completed_at:
         qs.completed_at = datetime.utcnow()
         db.commit()
-    correct = qs.correct_count if qs else 0
-    total = len(quiz.questions_data) if quiz else 0
-    speed = qs.speed_points if qs else 0
+        
+    correct = qs.correct_count
+    total = len(quiz.questions_data)
+    speed = qs.speed_points
     db.close()
-    session.clear()
-    return (f"<!DOCTYPE html><html><body style='font-family:sans-serif;text-align:center;"
-            f"margin-top:80px;background:#111;color:#fff'><h1>Quiz Complete!</h1>"
-            f"<p>Correct: {correct}/{total}</p><p>Speed Points: {speed}</p>"
-            f"<p style='color:#888'>Results recorded. You may close this tab.</p></body></html>")
+    return render_template('viva.html', result_view=True, correct=correct, total=total, speed=speed, username=session['username'])
 
 # ─── ROUTES - ADMIN ────────────────────────────────────────────────────────────
 
@@ -418,15 +382,14 @@ def result():
 def admin_login():
     if request.method == 'POST':
         if request.form.get('password') == ADMIN_PASSWORD:
-            session['admin_id'] = str(uuid.uuid4())
             session['admin'] = True
             return redirect(url_for('admin_dashboard'))
-        return render_template('admin_login.html', error='Incorrect password.')
-    return render_template('admin_login.html', error=None)
+        return render_template('admin_login.html', error='Invalid password')
+    return render_template('admin_login.html')
 
 @app.route('/admin/logout')
 def admin_logout():
-    session.clear()
+    session.pop('admin', None)
     return redirect(url_for('admin_login'))
 
 @app.route('/admin')
@@ -435,286 +398,29 @@ def admin_dashboard():
         return redirect(url_for('admin_login'))
     db = SessionLocal()
     quizzes = db.query(Quiz).order_by(Quiz.created_at.desc()).all()
-    data = [{'id': q.id, 'title': q.title, 'pin': q.pin, 'state': q.state,
-             'questions_data': q.questions_data, 'active_question_id': q.active_question_id}
-            for q in quizzes]
     db.close()
-    return render_template('admin.html', quizzes=data)
+    return render_template('admin.html', quizzes=quizzes)
 
 @app.route('/admin/quizzes')
-def admin_quizzes():
+def admin_get_quizzes():
     if not session.get('admin'):
         return '', 403
     db = SessionLocal()
-    quizzes = db.query(Quiz).all()
-    data = [{'id': q.id, 'state': q.state, 'active_question_id': q.active_question_id} for q in quizzes]
+    quizzes = db.query(Quiz).order_by(Quiz.created_at.desc()).all()
+    res = [{'id': q.id, 'title': q.title, 'pin': q.pin, 'state': q.state, 
+            'active_question_id': q.active_question_id} for q in quizzes]
     db.close()
-    return jsonify(data)
-
+    return jsonify(res)
 
 @app.route('/admin/live/<quiz_id>')
-def live_view(quiz_id):
+def admin_live_view(quiz_id):
     if not session.get('admin'):
         return redirect(url_for('admin_login'))
     db = SessionLocal()
     quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
     if not quiz:
         db.close()
-        return redirect(url_for('admin_dashboard'))
-    join_url = request.host_url.rstrip('/') + f'/?pin={quiz.pin}'
-    qr_b64 = gen_qr(join_url)
-    quiz_data = {
-        'id': quiz.id,
-        'title': quiz.title,
-        'pin': quiz.pin,
-        'state': quiz.state,
-        'questions_data': quiz.questions_data,
-        'active_question_id': quiz.active_question_id
-    }
-    db.close()
-    return render_template('live.html', quiz_id=quiz_id, quiz=quiz_data,
-                           join_url=join_url, qr_b64=qr_b64)
-
-@app.route('/admin/quiz/new', methods=['POST'])
-def create_quiz():
-    if not session.get('admin'):
-        return '', 403
-    title = request.form.get('title', 'Untitled Quiz')
-    try:
-        questions = json.loads(request.form.get('questions_json', '[]'))
-    except:
-        questions = []
-    pin, quiz_id = gen_pin(), str(uuid.uuid4())
-    join_url = request.host_url.rstrip('/') + f'/?pin={pin}'
-    qr_b64 = gen_qr(join_url)
-    db = SessionLocal()
-    db.add(Quiz(id=quiz_id, title=title, pin=pin,
-                admin_id=session.get('admin_id', 'admin'),
-                questions_data=questions, state='idle'))
-    db.commit()
-    db.close()
-    return jsonify({'quiz_id': quiz_id, 'pin': pin, 'qr': qr_b64, 'join_url': join_url})
-
-@app.route('/admin/quiz/<quiz_id>/question/open/<int:q_id>', methods=['POST'])
-def open_question(quiz_id, q_id):
-    if not session.get('admin'):
-        return '', 403
-    db = SessionLocal()
-    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
-    if not quiz or q_id >= len(quiz.questions_data):
-        db.close()
-        return '', 400
-    qdata = quiz.questions_data[q_id]
-    quiz.active_question_id = q_id
-    quiz.active_question_open_time = datetime.utcnow()
-    quiz.state = 'running'
-    db.commit()
-    db.close()
-    socketio.emit('question_opened', {'question_id': q_id, 'question': qdata}, room=quiz_id)
-    return jsonify({'ok': True})
-
-@app.route('/admin/quiz/<quiz_id>/question/close', methods=['POST'])
-def close_question(quiz_id):
-    if not session.get('admin'):
-        return '', 403
-    db = SessionLocal()
-    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
-    if quiz:
-        correct_answer = None
-        if quiz.active_question_id is not None and quiz.questions_data:
-            q = quiz.questions_data[quiz.active_question_id]
-            correct_answer = _get_correct_answer_str(q)
-        quiz.active_question_id = None
-        quiz.state = 'idle'
-        db.commit()
-        socketio.emit('question_closed', {'correct_answer': correct_answer}, room=quiz_id)
-    db.close()
-    return jsonify({'ok': True, 'correct_answer': correct_answer if quiz else None})
-
-@app.route('/admin/quiz/<quiz_id>/stats')
-def quiz_stats(quiz_id):
-    if not session.get('admin'):
-        return '', 403
-    db = SessionLocal()
-    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
-    sessions = db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id).all()
-    questions = quiz.questions_data if quiz else []
-    stats = []
-    for sess in sessions:
-        answers = db.query(Answer).filter(Answer.session_id == sess.id).all()
-        ans_map = {a.question_id: a for a in answers}
-        stats.append({
-            'username': sess.username, 'correct_count': sess.correct_count,
-            'speed_points': sess.speed_points, 'total_questions': len(questions),
-            'strikes': sess.strikes, 'attended': sess.attended,
-            'questions': [{
-                'q_id': i, 'q_text': q.get('q', ''), 'q_type': q.get('type', 'mcq'),
-                'user_answer': ans_map[i].user_answer if i in ans_map else None,
-                'correct_answer': _get_correct_answer_str(q),
-                'is_correct': ans_map[i].is_correct if i in ans_map else None,
-                'speed_points': ans_map[i].speed_points if i in ans_map else 0,
-                'time_taken': ans_map[i].time_taken if i in ans_map else None,
-                'strike_on_question': ans_map[i].strike_on_question if i in ans_map else False,
-            } for i, q in enumerate(questions)]
-        })
-    db.close()
-    return jsonify(stats)
-
-@app.route('/admin/quiz/<quiz_id>/export')
-def quiz_export(quiz_id):
-    if not session.get('admin'):
-        return '', 403
-    import io as _io
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
-        USE_XLSX = True
-    except ImportError:
-        USE_XLSX = False
-
-    db = SessionLocal()
-    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
-    sessions = db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id).all()
-    questions = quiz.questions_data if quiz else []
-    all_data = []
-    for sess in sessions:
-        answers = db.query(Answer).filter(Answer.session_id == sess.id).all()
-        all_data.append((sess, {a.question_id: a for a in answers}))
-    db.close()
-
-    hdr = ["Username", "Total Correct", "Speed Points", "Strikes"]
-    for i in range(len(questions)):
-        hdr += [f"Q{i+1} Result", f"Q{i+1} Speed Pts"]
-
-    def make_row(sess, ans_map):
-        row = [sess.username, sess.correct_count, sess.speed_points, sess.strikes]
-        for i in range(len(questions)):
-            a = ans_map.get(i)
-            if not a: row += ['N/A', 0]
-            elif a.strike_on_question: row += ['Strike', 0]
-            else: row += ['Correct' if a.is_correct else 'Wrong', a.speed_points]
-        return row
-
-    def q_summary():
-        rows = []
-        for i, q in enumerate(questions):
-            correct = wrong = unanswered = 0
-            for sess, ans_map in all_data:
-                a = ans_map.get(i)
-                if not a: unanswered += 1
-                elif a.is_correct: correct += 1
-                else: wrong += 1
-            total = correct + wrong
-            rows.append([i+1, q.get('q',''), q.get('type',''), correct, wrong, unanswered,
-                         f"{round(correct/total*100,1)}%" if total else "0%"])
-        return rows
-
-    if USE_XLSX:
-        wb = openpyxl.Workbook()
-        hf = Font(bold=True, color="FFFFFF")
-        hfill = PatternFill("solid", fgColor="1E3A5F")
-
-        ws1 = wb.active
-        ws1.title = "Student Details"
-        ws1.append(hdr)
-        for cell in ws1[1]:
-            cell.font = hf; cell.fill = hfill; cell.alignment = Alignment(horizontal='center')
-        for sess, ans_map in all_data:
-            ws1.append(make_row(sess, ans_map))
-
-        ws2 = wb.create_sheet("Question Summary")
-        ws2.append(["Q#", "Question", "Type", "Correct", "Wrong", "Not Attempted", "Correct %"])
-        for cell in ws2[1]:
-            cell.font = hf; cell.fill = hfill; cell.alignment = Alignment(horizontal='center')
-        for row in q_summary():
-            ws2.append(row)
-
-        buf = _io.BytesIO()
-        wb.save(buf); buf.seek(0)
-        return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                         as_attachment=True, download_name=f'quiz_{quiz_id[:8]}_stats.xlsx')
-    else:
-        import csv as _csv
-        out = _io.StringIO()
-        w = _csv.writer(out)
-        w.writerow(hdr)
-        for sess, ans_map in all_data:
-            w.writerow(make_row(sess, ans_map))
-        w.writerow([])
-        w.writerow(["Q#", "Question", "Type", "Correct", "Wrong", "Not Attempted", "Correct %"])
-        for row in q_summary():
-            w.writerow(row)
-        return Response(out.getvalue(), mimetype='text/csv',
-                        headers={'Content-Disposition': 'attachment;filename=quiz_stats.csv'})
-
-
-@app.route('/admin/quiz/<quiz_id>/delete', methods=['POST'])
-def delete_quiz(quiz_id):
-    if not session.get('admin'):
-        return '', 403
-    db = SessionLocal()
-    sessions = db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id).all()
-    for s in sessions:
-        db.query(Answer).filter(Answer.session_id == s.id).delete()
-    db.query(QuizSession).filter(QuizSession.quiz_id == quiz_id).delete()
-    db.query(Quiz).filter(Quiz.id == quiz_id).delete()
-    db.commit()
-    db.close()
-    with _lb_lock:
-        _lb_cache.pop(quiz_id, None)
-    return jsonify({'ok': True})
-
-@app.route('/admin/quiz/delete_all', methods=['POST'])
-def delete_all_quizzes():
-    if not session.get('admin'):
-        return '', 403
-    db = SessionLocal()
-    db.query(Answer).delete()
-    db.query(QuizSession).delete()
-    db.query(Quiz).delete()
-    db.commit()
-    db.close()
-    with _lb_lock:
-        _lb_cache.clear()
-    return jsonify({'ok': True})
-
-@app.route('/admin/quiz/<quiz_id>/user/<username>/delete', methods=['POST'])
-def delete_user_responses(quiz_id, username):
-    if not session.get('admin'):
-        return '', 403
-    db = SessionLocal()
-    sess = db.query(QuizSession).filter(
-        QuizSession.quiz_id == quiz_id,
-        QuizSession.username.ilike(username)
-    ).first()
-    if sess:
-        db.query(Answer).filter(Answer.session_id == sess.id).delete()
-        db.delete(sess)
-        db.commit()
-        with _lb_lock:
-            _lb_cache[quiz_id].pop(sess.id, None)
-            _lb_pending.add(quiz_id)
-        lb = _get_sorted_lb(quiz_id)
-        socketio.emit('leaderboard_update', {'leaderboard': lb}, room=quiz_id)
-    db.close()
-    return jsonify({'ok': True})
-
-# ─── WEBSOCKET ─────────────────────────────────────────────────────────────────
-
-@socketio.on('join_quiz')
-def on_join_quiz(data):
-    quiz_id = data.get('quiz_id')
-    join_room(quiz_id)
-    _prime_lb_cache(quiz_id)
-    emit('joined', {'ok': True})
-
-@socketio.on('get_leaderboard')
-def on_get_leaderboard(data):
-    quiz_id = data.get('quiz_id')
-    _prime_lb_cache(quiz_id)
-    emit('leaderboard_update', {'leaderboard': _get_sorted_lb(quiz_id)})
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))
-    logger.info(f"Quiz Platform starting on 0.0.0.0:{port}")
-    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+        return "Quiz not found", 404
+    # Plain data for template
+    q_data = {        'id': quiz.
+(Content truncated due to size limit. Use line ranges to read remaining content)
