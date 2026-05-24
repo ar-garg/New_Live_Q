@@ -81,6 +81,16 @@ class Answer(Base):
     time_taken = Column(Float, nullable=True)
     answered_at = Column(DateTime, default=datetime.utcnow)
 
+def quiz_to_admin_dict(quiz):
+    return {
+        'id': quiz.id,
+        'title': quiz.title,
+        'pin': quiz.pin,
+        'state': quiz.state,
+        'questions_data': quiz.questions_data,
+        'active_question_id': quiz.active_question_id
+    }
+
 Base.metadata.create_all(engine)
 
 # ─── IN-MEMORY LEADERBOARD CACHE ───────────────────────────────────────────────
@@ -397,7 +407,7 @@ def admin_dashboard():
     if not session.get('admin'):
         return redirect(url_for('admin_login'))
     db = SessionLocal()
-    quizzes = db.query(Quiz).order_by(Quiz.created_at.desc()).all()
+    quizzes = [quiz_to_admin_dict(q) for q in db.query(Quiz).order_by(Quiz.created_at.desc()).all()]
     db.close()
     return render_template('admin.html', quizzes=quizzes)
 
@@ -407,8 +417,7 @@ def admin_get_quizzes():
         return '', 403
     db = SessionLocal()
     quizzes = db.query(Quiz).order_by(Quiz.created_at.desc()).all()
-    res = [{'id': q.id, 'title': q.title, 'pin': q.pin, 'state': q.state, 
-            'active_question_id': q.active_question_id} for q in quizzes]
+    res = [quiz_to_admin_dict(q) for q in quizzes]
     db.close()
     return jsonify(res)
 
