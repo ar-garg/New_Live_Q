@@ -516,7 +516,7 @@ function renderQuestion(q) {
         '<div class="q-type-badge' + (qType === 'multi_correct' ? ' multi' : '') + '">' +
         (qType === 'mcq' ? 'Single correct' : qType === 'true_false' ? 'True / False' : qType === 'fill_up' ? 'Fill in the blank' : 'Multi correct — select all that apply') +
         '</div>' +
-        '<div class="q-text">' + q.q.split('\n').map(function(line){return escHtml(line);}).join('<br>') + '</div>' +
+        '<div class="q-text">' + q.q.split('\n').map(function(line){return escHtml(line).replace(/\t/g,'&nbsp;&nbsp;&nbsp;&nbsp;').replace(/ {2}/g,'&nbsp;&nbsp;');}).join('<br>') + '</div>' +
         '<div class="options" id="answerArea">';
 
     if (qType === 'mcq') {

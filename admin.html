@@ -314,11 +314,23 @@ function hideQuiz() {
     if (btn) { btn.textContent = 'Show text'; btn.className = 'btn-toggle-q'; }
 }
 
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatQuestionPreview(str) {
+    const text = String(str || '');
+    const preview = text.substring(0, 80) + (text.length > 80 ? '...' : '');
+    return preview.split('\n').map(line =>
+        escHtml(line).replace(/\t/g,'&nbsp;&nbsp;&nbsp;&nbsp;').replace(/ {2}/g,'&nbsp;&nbsp;')
+    ).join('<br>');
+}
+
 function renderQuestions(questions, activeQId, quizId) {
     document.getElementById('questionsList').innerHTML = (questions||[]).map((q,i) => `
         <div class="question-row ${activeQId===i?'q-active':''}">
             <span class="q-num">Q${i+1}</span>
-            <span class="q-text" style="color:${showQText?'inherit':'var(--border-dark)'};">${showQText?(q.q?q.q.substring(0,80)+(q.q.length>80?'…':''):'(empty)'):'••••••••••••••••'}</span>
+            <span class="q-text" style="color:${showQText?'inherit':'var(--border-dark)'};">${showQText?(q.q?formatQuestionPreview(q.q):'(empty)'):'&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'}</span>
             <span class="q-type">${q.type||'mcq'}</span>
             ${activeQId===i
                 ? `<button class="btn-close-q" onclick="closeQ('${quizId}')">Close</button>`
