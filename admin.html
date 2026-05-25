@@ -333,24 +333,48 @@ function renderQuestions(questions, activeQId, quizId) {
             <span class="q-text" style="color:${showQText?'inherit':'var(--border-dark)'};">${showQText?(q.q?formatQuestionPreview(q.q):'(empty)'):'&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'}</span>
             <span class="q-type">${q.type||'mcq'}</span>
             ${activeQId===i
-                ? `<button class="btn-close-q" onclick="closeQ('${quizId}')">Close</button>`
-                : `<button class="btn-open-q" onclick="openQ('${quizId}',${i})">Open</button>`}
+                ? `<button class="btn-close-q" onclick="closeQ('${quizId}')" ${qActionInFlight?'disabled style="opacity:0.5;cursor:not-allowed"':''}>Close</button>`
+                : `<button class="btn-open-q" onclick="openQ('${quizId}',${i})" ${qActionInFlight?'disabled style="opacity:0.5;cursor:not-allowed"':''}>Open</button>`}
         </div>
     `).join('') || '<div class="question-row"><span class="q-text" style="color:var(--muted)">No questions.</span></div>';
 }
 
+var qActionInFlight = false;
+
 function openQ(quizId, qId) {
-    fetch(`/admin/quiz/${quizId}/question/open/${qId}`, { method: 'POST' }).then(() => {
-        const q = allQuizzes.find(x => x.id === quizId);
-        if (q) { q.active_question_id = qId; q.state = 'running'; renderQuestions(q.questions_data, qId, quizId); renderGrid(); }
-    });
+    if (qActionInFlight) return;
+    qActionInFlight = true;
+    const q0 = allQuizzes.find(x => x.id === quizId);
+    if (q0) renderQuestions(q0.questions_data, q0.active_question_id, quizId); // redraw to disable buttons
+    fetch(`/admin/quiz/${quizId}/question/open/${qId}`, { method: 'POST' })
+        .then(() => {
+            const q = allQuizzes.find(x => x.id === quizId);
+            if (q) { q.active_question_id = qId; q.state = 'running'; }
+        })
+        .catch(() => {})
+        .finally(() => {
+            qActionInFlight = false;
+            const q = allQuizzes.find(x => x.id === quizId);
+            if (q) { renderQuestions(q.questions_data, q.active_question_id, quizId); renderGrid(); }
+        });
 }
 
 function closeQ(quizId) {
-    fetch(`/admin/quiz/${quizId}/question/close`, { method: 'POST' }).then(() => {
-        const q = allQuizzes.find(x => x.id === quizId);
-        if (q) { q.active_question_id = null; q.state = 'idle'; renderQuestions(q.questions_data, null, quizId); renderGrid(); }
-    });
+    if (qActionInFlight) return;
+    qActionInFlight = true;
+    const q0 = allQuizzes.find(x => x.id === quizId);
+    if (q0) renderQuestions(q0.questions_data, q0.active_question_id, quizId); // redraw to disable buttons
+    fetch(`/admin/quiz/${quizId}/question/close`, { method: 'POST' })
+        .then(() => {
+            const q = allQuizzes.find(x => x.id === quizId);
+            if (q) { q.active_question_id = null; q.state = 'idle'; }
+        })
+        .catch(() => {})
+        .finally(() => {
+            qActionInFlight = false;
+            const q = allQuizzes.find(x => x.id === quizId);
+            if (q) { renderQuestions(q.questions_data, q.active_question_id, quizId); renderGrid(); }
+        });
 }
 
 function renderLB(board) {

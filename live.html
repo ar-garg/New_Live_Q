@@ -694,8 +694,8 @@ function renderQControls() {
             '<span class="q-spacer"></span>' +
             (answerCounts[i] ? '<span class="q-answered">' + answerCounts[i] + ' ans</span>' : '') +
             (isActive
-                ? '<button class="btn-openq close-btn" onclick="closeQ()">Close</button>'
-                : '<button class="btn-openq open-btn" onclick="openQ(' + i + ')">Open</button>') +
+                ? '<button class="btn-openq close-btn" onclick="closeQ()" ' + (qActionInFlight ? 'disabled style="opacity:0.5;cursor:not-allowed"' : '') + '>Close</button>'
+                : '<button class="btn-openq open-btn" onclick="openQ(' + i + ')" ' + (qActionInFlight ? 'disabled style="opacity:0.5;cursor:not-allowed"' : '') + '>Open</button>') +
             '</div>';
     });
     document.getElementById('qControls').innerHTML = html || '<div style="color:var(--muted);font-size:0.8rem;">No questions.</div>';
@@ -703,19 +703,31 @@ function renderQControls() {
 
 renderQControls();
 
+var qActionInFlight = false;
+
 function openQ(qId) {
+    if (qActionInFlight) return;
+    qActionInFlight = true;
+    renderQControls(); // re-render to disable buttons immediately
     fetch('/admin/quiz/' + quizId + '/question/open/' + qId, { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function() {
             activeQId = qId;
             updateStatusPill(true);
+        })
+        .catch(function() {})
+        .finally(function() {
+            qActionInFlight = false;
             renderQControls();
         });
 }
 
 function closeQ() {
+    if (qActionInFlight) return;
+    qActionInFlight = true;
     var qIdToClose = activeQId;
     var qToReveal = lastQuestion;
+    renderQControls(); // re-render to disable buttons immediately
     fetch('/admin/quiz/' + quizId + '/question/close', { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -729,6 +741,10 @@ function closeQ() {
             }
             activeQId = null;
             updateStatusPill(false);
+        })
+        .catch(function() {})
+        .finally(function() {
+            qActionInFlight = false;
             renderQControls();
         });
 }
